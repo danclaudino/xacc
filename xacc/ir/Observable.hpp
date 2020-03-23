@@ -31,6 +31,7 @@ public:
       return;
   }
   virtual void fromOptions(const HeterogeneousMap& options) = 0;
+
 };
 
 } // namespace xacc

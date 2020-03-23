@@ -692,6 +692,18 @@ void PauliOperator::fromXACCIR(std::shared_ptr<IR> ir) {
   }
 }
 
+/*
+// method to compute the commutators required for ADAPT-VQE
+// it takes one operator for the pool as argument and
+// returns the commutator as Pauli words
+std::shared_ptr<PauliOperator>
+PauliOperator::commutator(const PauliOperator &Hamiltonian, const PauliOperator &pauliOp){
+  auto HOp = Hamiltonian->operator*=(pauliOp)
+  auto OpH = pauliOp->operator*=(H)
+  return HOp->operator-=(OpH) 
+}
+*/
+
 } // namespace quantum
 } // namespace xacc
 

@@ -14,8 +14,11 @@
 #define XACC_ALGORITHM_ADAPT_VQE_HPP_
 
 #include "Algorithm.hpp"
-// include "Observable.hpp"
+#include "Observable.hpp"
+#include "PauliOperator.hpp"
 #include <vector>
+
+using namespace xacc::quantum;
 
 namespace xacc{
 namespace algorithm{
@@ -44,20 +47,21 @@ protected:
   int nElectrons;
   std::string pool;
   int _maxIter;
-  // std::vector<double> initial_params;
+  double _threshold;
   // std::string gradient; will eventually come back here
 
   HeterogeneousMap _parameters;
 
 public:
+
   bool initialize(const HeterogeneousMap &parameters) override;
   const std::vector<std::string> requiredParameters() const override;
-
   void execute(const std::shared_ptr<AcceleratorBuffer> buffer) const override;
-  
   const std::string name() const override { return "adapt-vqe"; }
   const std::string description() const override { return ""; }
 
+  void updateAnsatz(const std::unordered_map<std::string, Term> &terms,
+        std::shared_ptr<CompositeInstruction> ansatzInstructions) const;
 
   DEFINE_ALGORITHM_CLONE(ADAPT_VQE)
 
