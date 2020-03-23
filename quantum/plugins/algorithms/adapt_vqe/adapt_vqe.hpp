@@ -24,14 +24,28 @@ namespace xacc{
 namespace algorithm{
 
 class OperatorPool : public Identifiable {
+
+protected:
+
+  std::string
+  constructOperatorString(int p, int q, std::string norm = "1.0") {
+    auto operatorString = norm + std::to_string(p) + "^ " + std::to_string(q) + " - "
+                        + norm + std::to_string(q) + "^ " + std::to_string(p);
+      return operatorString;
+  }
+
+  std::string
+  constructOperatorString(int p, int q, int r, int s, std::string norm = "1.0") {
+    auto operatorString = norm + std::to_string(p) + "^ " + std::to_string(q)
+                        + std::to_string(r) + "^" + std::to_string(s) + " - "
+                        + norm + std::to_string(s) + "^ " + std::to_string(r)
+                        + std::to_string(q) + "-" + std::to_string(p);
+      return operatorString;
+  }
+
+
 public:
   virtual bool isValidOperatorPool(const std::string &operatorPool) = 0;
-
-  virtual std::string 
-  constructOperatorString(const int p, const int q, const std::string norm = "1.0");
-  virtual std::string
-  constructOperatorString(const int p, const int q, const int r, 
-    const int s, const std::string norm = "1.0");
 
   virtual std::vector<std::shared_ptr<Observable>>
   generate(const int &nQubits, const int &nElectrons);
@@ -42,7 +56,6 @@ class ADAPT_VQE : public Algorithm {
 protected:
   std::shared_ptr<Observable> observable;
   std::shared_ptr<Optimizer> optimizer;
-  std::shared_ptr<CompositeInstruction> kernel; // keep this for now
   std::shared_ptr<Accelerator> accelerator;
   int nElectrons;
   std::string pool;
@@ -59,9 +72,6 @@ public:
   void execute(const std::shared_ptr<AcceleratorBuffer> buffer) const override;
   const std::string name() const override { return "adapt-vqe"; }
   const std::string description() const override { return ""; }
-
-  void updateAnsatz(const std::unordered_map<std::string, Term> &terms,
-        std::shared_ptr<CompositeInstruction> ansatzInstructions) const;
 
   DEFINE_ALGORITHM_CLONE(ADAPT_VQE)
 

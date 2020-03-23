@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2019 UT-Battelle, LLC.
+ * Copyright (c) 2020 UT-Battelle, LLC.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * and Eclipse Distribution License v1.0 which accompanies this
@@ -26,6 +26,7 @@ namespace xacc{
 namespace algorithm{
 
 class UCCSD : public OperatorPool {
+
 public:
   // check if pool exists
   bool isValidOperatorPool(const std::string &operatorPool) override {
@@ -33,23 +34,6 @@ public:
       return true;
     }
     return false;
-  }
-
-  // TODO normal ordered operators
-  std::string
-  constructOperatorString(int p, int q, std::string norm = "1.0") override {
-    auto operatorString = norm + std::to_string(p) + "^ " + std::to_string(q) + " - "
-                        + norm + std::to_string(q) + "^ " + std::to_string(p);
-      return operatorString;
-  }
-
-  std::string
-  constructOperatorString(int p, int q, int r, int s, std::string norm = "1.0") override {
-    auto operatorString = norm + std::to_string(p) + "^ " + std::to_string(q)
-                        + std::to_string(r) + "^" + std::to_string(s) + " - "
-                        + norm + std::to_string(s) + "^ " + std::to_string(r)
-                        + std::to_string(q) + "-" + std::to_string(p);
-      return operatorString;
   }
 
   // generate the pool
