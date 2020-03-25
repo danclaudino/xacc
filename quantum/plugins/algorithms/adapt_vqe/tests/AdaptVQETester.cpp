@@ -20,35 +20,16 @@
 #include "PauliOperator.hpp"
 
 using namespace xacc;
-const std::string rucc = R"rucc(__qpu__ void f(qbit q, double t0) {
-    X(q[0]);
-    X(q[1]);
-    Rx(q[0],1.5707);
-    H(q[1]);
-    H(q[2]);
-    H(q[3]);
-    CNOT(q[0],q[1]);
-    CNOT(q[1],q[2]);
-    CNOT(q[2],q[3]);
-    Rz(q[3], t0);
-    CNOT(q[2],q[3]);
-    CNOT(q[1],q[2]);
-    CNOT(q[0],q[1]);
-    Rx(q[0],-1.5707);
-    H(q[1]);
-    H(q[2]);
-    H(q[3]);
-})rucc";
 
-TEST(VQETester, checkSimple) {
+TEST(AdaptVQETester, checkSimple) {
 //   if (xacc::hasAccelerator("qpp")) {
-    auto acc = xacc::getAccelerator("qpp", {std::make_pair("vqe-mode",true)});
+    auto acc = xacc::getAccelerator("tnqvm", {std::make_pair("vqe-mode",true)});
     auto buffer = xacc::qalloc(4);//->createBuffer("q", 4);
 
-    auto compiler = xacc::getCompiler("xasm");
+    //auto compiler = xacc::getCompiler("xasm");
 
-    auto ir = compiler->compile(rucc, nullptr);
-    auto ruccsd = ir->getComposite("f");
+    //auto ir = compiler->compile(rucc, nullptr);
+    //auto ruccsd = ir->getComposite("f");
 
     auto optimizer = xacc::getOptimizer("nlopt");
     std::shared_ptr<Observable> observable = std::make_shared<xacc::quantum::PauliOperator>();//= std::make_shared<xacc::quantum::PauliOperator>();
@@ -59,15 +40,14 @@ TEST(VQETester, checkSimple) {
         "+ (0.17028,0) Z1 + (-0.0454063,0) X0 X1 Y2 Y3 + (0.0454063,0) X0 Y1 "
         "Y2 X3 + (0.168336,0) Z0 Z1 + (0.0454063,0) Y0 X1 X2 Y3");
 
-    auto vqe = xacc::getService<Algorithm>("vqe");
-    EXPECT_TRUE(vqe->initialize({std::make_pair("ansatz",ruccsd),
-                                std::make_pair("accelerator",acc),
+    auto adapt_vqe = xacc::getService<Algorithm>("adapt-vqe");
+    EXPECT_TRUE(adapt_vqe->initialize({std::make_pair("accelerator",acc),
                                 std::make_pair("observable", observable),
-                                std::make_pair("optimizer",optimizer)}));
-    vqe->execute(buffer);
-    EXPECT_NEAR(-1.13717, mpark::get<double>(buffer->getInformation("opt-val")), 1e-4);
-    EXPECT_NEAR(-1.13717,vqe->execute(buffer, (*buffer)["opt-params"].as<std::vector<double>>())[0], 1e-4);
-    // std::cout << "EVALED: " << vqe->execute(buffer, (*buffer)["opt-params"].as<std::vector<double>>()) << "\n";
+                                std::make_pair("optimizer", optimizer),
+                                std::make_pair("pool", "uccsd"),
+                                std::make_pair("nElectrons", 2)}));
+    adapt_vqe->execute(buffer);
+    EXPECT_NEAR(-1.13717, buffer->getInformation("opt-val").as<double>(), 1e-4);
 //   }
 }
 

@@ -23,6 +23,7 @@
 #include <memory>
 #include <iomanip>
 #include <cmath>
+#include <typeinfo>
 
 using namespace xacc;
 using namespace xacc::quantum;
@@ -49,14 +50,11 @@ bool ADAPT_VQE::initialize(const HeterogeneousMap &parameters) {
   nElectrons = parameters.get<int>("nElectrons");
   if (parameters.stringExists("maxiter")) {
     _maxIter = parameters.get<int>("maxiter");
-  } else{
-    int _maxIter = 50;
-  }
+  } 
+  
   if (parameters.stringExists("threshold")) {
     _threshold = parameters.get<double>("threshold");
-  } else{
-    double _threshold = 1.0e-4;
-  }
+  } 
   pool = parameters.getString("pool");
   
   return true;
@@ -72,8 +70,8 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   auto ansatzInstructions = ansatzRegistry->createComposite("ansatzCircuit");
   auto operatorPool = xacc::getService<OperatorPool>(pool);
   auto operators = operatorPool->generate(buffer->size(), nElectrons);
-
   auto vqe = xacc::getAlgorithm("vqe");
+
   HeterogeneousMap vqeParameters;
   vqeParameters.insert("optimizer", optimizer);
   vqeParameters.insert("accelerator", accelerator);
@@ -88,24 +86,29 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
   std::vector<double> x; // these are the thetas
   double oldEnergy = 0.0;
+  for (int iter = 0; iter < _maxIter; iter++){
 
-  for (int iter; iter < _maxIter; iter++){
+    std::cout << "Iteration: " << iter << std::endl;
+    std::cout << "Computing [H, A]" << std::endl;
 
     // compute commutators
     int largestCommutatorIdx = 0;
     double largestCommutator = 0.0;
-    x.push_back(0.0);
-    for (int operatorIdx; operatorIdx < operators.size(); operatorIdx++){
+    for (int operatorIdx = 0; operatorIdx < operators.size(); operatorIdx++){
 
       //compute commutator for operatorIdx
       auto operatorCommutator =
         std::dynamic_pointer_cast<PauliOperator>(observable)->
         operator*=(*std::dynamic_pointer_cast<PauliOperator>(operators[operatorIdx]));
-      auto observedCommutator = operatorCommutator.observe(ansatzInstructions);
-      vqeParameters.insert("observable", observedCommutator);
+      auto operatorCommutatorPtr =
+        std::dynamic_pointer_cast<Observable>(std::make_shared<PauliOperator>(operatorCommutator));
+
+      vqeParameters.insert("observable", operatorCommutatorPtr);
       vqeParameters.insert("ansatz", ansatzInstructions);
+      vqe->initialize(vqeParameters);
       auto commutatorValue = vqe->execute(buffer, x);
-      
+
+      std::cout << "[H," << operatorIdx << "] = " << 2.0 * commutatorValue[0] << std::endl;
       if(2.0 * commutatorValue[0] < largestCommutator){
         largestCommutatorIdx = operatorIdx;
         largestCommutator = 2.0 * commutatorValue[0];
@@ -124,11 +127,12 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
     auto newEnergy = (*buffer)["opt-val"].as<double>();
     if (abs(newEnergy - oldEnergy) <= _threshold){
-      std::cout << "ADAPT-VQE converged in" << _maxIter << "iterations.\n";
+      std::cout << "ADAPT-VQE converged in " << iter << " iterations.\n";
       std::cout << "ADAPT-VQE energy:" << newEnergy << "a.u.\n";
       return;
     } else if (abs(newEnergy - oldEnergy) > _threshold && iter < _maxIter){
       oldEnergy = newEnergy;
+      x.push_back(0.0);
     } else {
       std::cout << "ADAPT-VQE did not converge in" << _maxIter << " iterations.\n";
       return;

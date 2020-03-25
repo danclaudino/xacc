@@ -11,5 +11,5 @@
 #   Alexander J. McCaskey - initial API and implementation
 # *******************************************************************************/
 include_directories(${CMAKE_BINARY_DIR})
-add_xacc_test(VQE)
-target_link_libraries(VQETester xacc xacc-pauli)
+add_xacc_test(AdaptVQE)
+target_link_libraries(AdaptVQETester xacc xacc-pauli)

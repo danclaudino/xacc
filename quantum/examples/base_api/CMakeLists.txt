@@ -10,6 +10,9 @@
 # Contributors:
 #   Alexander J. McCaskey - initial API and implementation
 # *******************************************************************************/
+add_executable(h2_adapt_vqe h2_adapt_vqe.cpp)
+target_link_libraries(h2_adapt_vqe PRIVATE xacc xacc-quantum-gate)
+
 add_executable(bell_quil_ibm_local bell_quil_ibm_local.cpp)
 target_link_libraries(bell_quil_ibm_local PRIVATE xacc)
 
