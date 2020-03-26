@@ -68,10 +68,13 @@ public:
         antiHermitianOp += FermionOperator({{ab, 1}, {ib, 0}}, inv_sqrt_2);
         antiHermitianOp -= FermionOperator({{ib, 1}, {ab, 0}}, inv_sqrt_2);
 
-        // std::cout << antiHermitianOp.toString();
         auto pauliOp = jw->transform(std::shared_ptr<Observable>(&antiHermitianOp, [](Observable *) {}));
-        pool.push_back(pauliOp);
+        if (std::dynamic_pointer_cast<PauliOperator>(pauliOp)->getTerms().size() != 0){
+          pool.push_back(pauliOp);
+        }
+
       }
+
     }
 
     // double excitations
@@ -108,7 +111,9 @@ public:
             antiHermitianOp -= FermionOperator({{jb, 1}, {ba, 0}, {ia, 1}, {ab, 0}}, one_inv_sqrt_12);
 
             auto pauliOp = jw->transform(std::shared_ptr<Observable>(&antiHermitianOp, [](Observable *) {}));
-            pool.push_back(pauliOp);
+            if (std::dynamic_pointer_cast<PauliOperator>(pauliOp)->getTerms().size() != 0){
+              pool.push_back(pauliOp);
+            }
 
             antiHermitianOp = FermionOperator({{aa, 1}, {ia, 0}, {bb, 1}, {jb, 0}}, 0.5);
             antiHermitianOp -= FermionOperator({{jb, 1}, {bb, 0}, {ia, 1}, {aa, 0}}, 0.5);
@@ -119,11 +124,13 @@ public:
             antiHermitianOp += FermionOperator({{aa, 1}, {ib, 0}, {bb, 1}, {ja, 0}}, -0.5);
             antiHermitianOp -= FermionOperator({{ja, 1}, {bb, 0}, {ib, 1}, {aa, 0}}, -0.5);
 
-            antiHermitianOp = FermionOperator({{ab, 1}, {ia, 0}, {ba, 1}, {jb, 0}}, 0.5);
-            antiHermitianOp -= FermionOperator({{jb, 1}, {ba, 0}, {ia, 1}, {ab, 0}}, 0.5);
+            antiHermitianOp += FermionOperator({{ab, 1}, {ia, 0}, {ba, 1}, {jb, 0}}, -0.5);
+            antiHermitianOp -= FermionOperator({{jb, 1}, {ba, 0}, {ia, 1}, {ab, 0}}, -0.5);
 
             pauliOp = jw->transform(std::shared_ptr<Observable>(&antiHermitianOp, [](Observable *) {}));
-            pool.push_back(pauliOp);
+            if (std::dynamic_pointer_cast<PauliOperator>(pauliOp)->getTerms().size() != 0){
+              pool.push_back(pauliOp);
+            }
           }
         }
       }
