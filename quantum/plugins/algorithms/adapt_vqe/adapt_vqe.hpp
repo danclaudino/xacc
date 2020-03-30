@@ -24,6 +24,7 @@ namespace xacc{
 namespace algorithm{
 
 class OperatorPool : public Identifiable {
+    /*
 
 protected:
 
@@ -42,7 +43,7 @@ protected:
                         + std::to_string(q) + "^ " + std::to_string(p);
       return operatorString;
   }
-
+*/
 
 public:
   virtual bool isValidOperatorPool(const std::string &operatorPool) = 0;
@@ -60,7 +61,7 @@ protected:
   int nElectrons;
   std::string pool;
   int _maxIter = 50;
-  double _threshold = 1.0e-4;
+  double _threshold = 1.0e-2;
   // std::string gradient; will eventually come back here
 
   HeterogeneousMap _parameters;

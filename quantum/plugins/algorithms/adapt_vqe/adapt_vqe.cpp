@@ -78,12 +78,6 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   auto operatorPool = xacc::getService<OperatorPool>(pool);
   auto operators = operatorPool->generate(buffer->size(), nElectrons);
   auto vqe = xacc::getAlgorithm("vqe");
-  auto largestCommutatorGate = std::dynamic_pointer_cast<quantum::Circuit>(
-    xacc::getService<Instruction>("exp_i_theta"));
-
-  HeterogeneousMap vqeParameters;
-  vqeParameters.insert("optimizer", optimizer);
-  vqeParameters.insert("accelerator", accelerator);
   
   // instructions for mean-field state
   for (int i = nElectrons - 1; i >= 0; i--) {
@@ -112,11 +106,14 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       PauliOperator commutator = H * A - A * H;
       auto operatorCommutatorPtr = std::shared_ptr<Observable>(&commutator, [](Observable *) {});
 
-      vqeParameters.insert("observable", operatorCommutatorPtr);
-      vqeParameters.insert("ansatz", ansatzInstructions);
-      vqe->initialize(vqeParameters);
+      auto grad_vqe_energy = xacc::getAlgorithm(
+          "vqe", {std::make_pair("observable", operatorCommutatorPtr),
+                  std::make_pair("optimizer", optimizer),
+                  std::make_pair("accelerator", accelerator),
+                  std::make_pair("ansatz", ansatzInstructions)});
 
-      auto commutatorValue = vqe->execute(buffer, x)[0];
+      auto tmp_buffer = xacc::qalloc(buffer->size());
+      auto commutatorValue = grad_vqe_energy->execute(tmp_buffer, x)[0];
       std::cout << "[H," << operatorIdx << "] = " << commutatorValue << std::endl;
     
       if(commutatorValue > largestCommutator){
@@ -125,15 +122,25 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       } 
     }
 
-    largestCommutatorGate->expand({std::make_pair("pauli", operators[largestCommutatorIdx]->toString()), std::make_pair("param_id", std::string("x")+std::to_string(iter))});
+    auto largestCommutatorGate = std::dynamic_pointer_cast<quantum::Circuit>(
+        xacc::getService<Instruction>("exp_i_theta"));
+
+    largestCommutatorGate->expand(
+        {std::make_pair("pauli", operators[largestCommutatorIdx]->toString()),
+         std::make_pair("param_id", std::string("x") + std::to_string(iter)),
+         std::make_pair("no-i", true)});
+
     ansatzInstructions->addVariable(std::string("x") + std::to_string(iter));
     for (auto& inst : largestCommutatorGate->getInstructions()){  
       ansatzInstructions->addInstruction(inst);
     }
-    vqeParameters.insert("observable", observable);
-    vqeParameters.insert("ansatz", ansatzInstructions);
-    vqe->initialize(vqeParameters);
-    vqe->execute(buffer);
+
+    auto sub_vqe = xacc::getAlgorithm(
+        "vqe", {std::make_pair("observable", observable),
+                std::make_pair("optimizer", optimizer),
+                std::make_pair("accelerator", accelerator),
+                std::make_pair("ansatz", ansatzInstructions)});
+    sub_vqe->execute(buffer);
 
     auto newEnergy = (*buffer)["opt-val"].as<double>();
     std::cout << "Energy at iteration " << iter << " : " << newEnergy << std::endl;
