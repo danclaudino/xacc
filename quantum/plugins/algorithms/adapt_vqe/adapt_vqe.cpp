@@ -75,6 +75,7 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
   auto ansatzRegistry = xacc::getIRProvider("quantum");
   auto ansatzInstructions = ansatzRegistry->createComposite("ansatzCircuit");
+
   auto operatorPool = xacc::getService<OperatorPool>(pool);
   auto operators = operatorPool->generate(buffer->size(), nElectrons);
   auto vqe = xacc::getAlgorithm("vqe");
@@ -88,16 +89,16 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   }
 
   std::vector<double> x; // these are the thetas
-  //x.push_back(0.0);
   double oldEnergy = 0.0;
-  for (int iter = 0; iter < 1; iter++){
+  for (int iter = 0; iter < 2; iter++){
 
-    std::cout << "Iteration: " << iter << std::endl;
+    std::cout << "Iteration: " << iter + 1 << std::endl;
     std::cout << "Computing [H, A]" << std::endl;
 
     // compute commutators
     int largestCommutatorIdx = 0;
     double largestCommutator = 0.0;
+    double gradientNorm = 0.0;
     for (int operatorIdx = 0; operatorIdx < operators.size(); operatorIdx++){
 
       //compute commutator for operatorIdx
@@ -116,41 +117,55 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       auto commutatorValue = grad_vqe_energy->execute(tmp_buffer, x)[0];
       std::cout << "[H," << operatorIdx << "] = " << commutatorValue << std::endl;
     
-      if(commutatorValue > largestCommutator){
+      if(abs(commutatorValue) > largestCommutator){
         largestCommutatorIdx = operatorIdx;
         largestCommutator = commutatorValue;
-      } 
+      }
+
+      gradientNorm += commutatorValue * commutatorValue;
     }
 
-    auto largestCommutatorGate = std::dynamic_pointer_cast<quantum::Circuit>(
-        xacc::getService<Instruction>("exp_i_theta"));
+    gradientNorm = std::sqrt(gradientNorm);
+    std::cout << "Norm of gradient vector: " << gradientNorm << "a.u.\n";
 
-    largestCommutatorGate->expand(
-        {std::make_pair("pauli", operators[largestCommutatorIdx]->toString()),
-         std::make_pair("param_id", std::string("x") + std::to_string(iter)),
-         std::make_pair("no-i", true)});
-
-    ansatzInstructions->addVariable(std::string("x") + std::to_string(iter));
-    for (auto& inst : largestCommutatorGate->getInstructions()){  
-      ansatzInstructions->addInstruction(inst);
-    }
-
-    auto sub_vqe = xacc::getAlgorithm(
-        "vqe", {std::make_pair("observable", observable),
-                std::make_pair("optimizer", optimizer),
-                std::make_pair("accelerator", accelerator),
-                std::make_pair("ansatz", ansatzInstructions)});
-    sub_vqe->execute(buffer);
-
-    auto newEnergy = (*buffer)["opt-val"].as<double>();
-    std::cout << "Energy at iteration " << iter << " : " << newEnergy << std::endl;
-    if (abs(newEnergy - oldEnergy) <= _threshold){
+    if (gradientNorm < _threshold) {
       std::cout << "ADAPT-VQE converged in " << iter << " iterations.\n";
-      std::cout << "ADAPT-VQE energy:" << newEnergy << "a.u.\n";
-      return;
-    } else if (abs(newEnergy - oldEnergy) > _threshold && iter < _maxIter){
+      std::cout << "ADAPT-VQE energy:" << oldEnergy << " a.u.\n";
+      return; 
+
+    } else if (iter < _maxIter) {
+      auto largestCommutatorGate = std::dynamic_pointer_cast<quantum::Circuit>(
+          xacc::getService<Instruction>("exp_i_theta"));
+
+      largestCommutatorGate->expand(
+          {std::make_pair("pauli", operators[largestCommutatorIdx]->toString()),
+          std::make_pair("param_id", std::string("x") + std::to_string(iter)),
+          std::make_pair("no-i", true)});
+
+      //auto adaptAnsatz = ansatzInstructions->clone();
+      ansatzInstructions->addVariable(std::string("x") + std::to_string(iter));
+      for (auto& inst : largestCommutatorGate->getInstructions()){  
+        ansatzInstructions->addInstruction(inst);
+      }
+
+      auto sub_vqe = xacc::getAlgorithm(
+          "vqe", {std::make_pair("observable", observable),
+                  std::make_pair("optimizer", optimizer),
+                  std::make_pair("accelerator", accelerator),
+                  std::make_pair("ansatz", ansatzInstructions)});
+      sub_vqe->execute(buffer);
+
+      auto newEnergy = (*buffer)["opt-val"].as<double>();
+      auto newParams = (*buffer)["opt-params"].as<std::vector<double>>();
+
+      for (int i = 0; i < newParams.size() - 1; i++){
+        x.push_back(newParams[i]);
+      }
+      x.push_back(newParams.back());
+
+      std::cout << "Energy at iteration " << iter + 1 << " : " << newEnergy << "\n\n" << std::endl;
       oldEnergy = newEnergy;
-      x.push_back(0.0);
+
     } else {
       std::cout << "ADAPT-VQE did not converge in" << _maxIter << " iterations.\n";
       return;
