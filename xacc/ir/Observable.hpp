@@ -31,6 +31,13 @@ public:
       return;
   }
   virtual void fromOptions(const HeterogeneousMap& options) = 0;
+
+  virtual std::shared_ptr<Observable>
+  commutator(std::shared_ptr<Observable> obs) {
+      //xacc::error("not implemented here");
+      return nullptr;
+  }
+
 };
 
 } // namespace xacc

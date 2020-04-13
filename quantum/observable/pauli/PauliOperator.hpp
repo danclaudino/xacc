@@ -320,6 +320,9 @@ public:
   void fromOptions(const HeterogeneousMap& options) override {
       return;
   }
+  
+  std::shared_ptr<Observable>
+  commutator(std::shared_ptr<Observable> obs) override;
 
 };
 } // namespace quantum

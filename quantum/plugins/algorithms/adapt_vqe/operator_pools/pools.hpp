@@ -20,7 +20,6 @@
 #include "xacc_observable.hpp"
 #include "FermionOperator.hpp"
 #include "ObservableTransform.hpp"
-//#include "<vector>"
 
 namespace xacc{
 namespace algorithm{
@@ -61,18 +60,19 @@ public:
         int ab = 2 * a + 2 * _nOccupied + 1;
 
         // spin-adapted singles
-        FermionOperator antiHermitianOp;
-        antiHermitianOp = FermionOperator({{aa, 1}, {ia, 0}}, inv_sqrt_2);
-        antiHermitianOp -= FermionOperator({{ia, 1}, {aa, 0}}, inv_sqrt_2);
+        FermionOperator fermiOp;
+        fermiOp = FermionOperator({{aa, 1}, {ia, 0}}, inv_sqrt_2);
+        fermiOp -= FermionOperator({{ia, 1}, {aa, 0}}, inv_sqrt_2);
 
-        antiHermitianOp += FermionOperator({{ab, 1}, {ib, 0}}, inv_sqrt_2);
-        antiHermitianOp -= FermionOperator({{ib, 1}, {ab, 0}}, inv_sqrt_2);
+        fermiOp += FermionOperator({{ab, 1}, {ib, 0}}, inv_sqrt_2);
+        fermiOp -= FermionOperator({{ib, 1}, {ab, 0}}, inv_sqrt_2);
 
-        auto pauliOp = jw->transform(std::shared_ptr<Observable>(&antiHermitianOp, [](Observable *) {}));
+        auto pauliOp = jw->transform(std::shared_ptr<Observable>(&fermiOp, [](Observable *) {}));
         if (std::dynamic_pointer_cast<PauliOperator>(pauliOp)->getTerms().size() != 0){
-          pool.push_back(pauliOp);
+          auto Op = std::dynamic_pointer_cast<Observable>(std::make_shared<FermionOperator>(fermiOp));
+          pool.push_back(Op);
         }
-
+        std::cout << pool.back()->toString() << "\n";
       }
 
     }
@@ -91,46 +91,49 @@ public:
             int ba = 2 * b + 2 * _nOccupied;
             int bb = 2 * b + 2 * _nOccupied + 1;
 
-            FermionOperator antiHermitianOp;
-            antiHermitianOp = FermionOperator({{aa, 1}, {ia, 0}, {ba, 1}, {ja, 0}}, two_inv_sqrt_12);
-            antiHermitianOp -= FermionOperator({{ja, 1}, {ba, 0}, {ia, 1}, {aa, 0}}, two_inv_sqrt_12);
+            FermionOperator fermiOp;
+            fermiOp = FermionOperator({{aa, 1}, {ia, 0}, {ba, 1}, {ja, 0}}, two_inv_sqrt_12);
+            fermiOp -= FermionOperator({{ja, 1}, {ba, 0}, {ia, 1}, {aa, 0}}, two_inv_sqrt_12);
 
-            antiHermitianOp += FermionOperator({{ab, 1}, {ib, 0}, {bb, 1}, {jb, 0}}, two_inv_sqrt_12);
-            antiHermitianOp -= FermionOperator({{jb, 1}, {bb, 0}, {ib, 1}, {ab, 0}}, two_inv_sqrt_12);
+            fermiOp += FermionOperator({{ab, 1}, {ib, 0}, {bb, 1}, {jb, 0}}, two_inv_sqrt_12);
+            fermiOp -= FermionOperator({{jb, 1}, {bb, 0}, {ib, 1}, {ab, 0}}, two_inv_sqrt_12);
 
-            antiHermitianOp += FermionOperator({{aa, 1}, {ia, 0}, {bb, 1}, {jb, 0}}, one_inv_sqrt_12);
-            antiHermitianOp -= FermionOperator({{jb, 1}, {bb, 0}, {ia, 1}, {aa, 0}}, one_inv_sqrt_12);
+            fermiOp += FermionOperator({{aa, 1}, {ia, 0}, {bb, 1}, {jb, 0}}, one_inv_sqrt_12);
+            fermiOp -= FermionOperator({{jb, 1}, {bb, 0}, {ia, 1}, {aa, 0}}, one_inv_sqrt_12);
 
-            antiHermitianOp += FermionOperator({{ab, 1}, {ib, 0}, {ba, 1}, {ja, 0}}, one_inv_sqrt_12);
-            antiHermitianOp -= FermionOperator({{ja, 1}, {ba, 0}, {ib, 1}, {ab, 0}}, one_inv_sqrt_12);
+            fermiOp += FermionOperator({{ab, 1}, {ib, 0}, {ba, 1}, {ja, 0}}, one_inv_sqrt_12);
+            fermiOp -= FermionOperator({{ja, 1}, {ba, 0}, {ib, 1}, {ab, 0}}, one_inv_sqrt_12);
 
-            antiHermitianOp += FermionOperator({{aa, 1}, {ib, 0}, {bb, 1}, {ja, 0}}, one_inv_sqrt_12);
-            antiHermitianOp -= FermionOperator({{ja, 1}, {bb, 0}, {ib, 1}, {aa, 0}}, one_inv_sqrt_12);
+            fermiOp += FermionOperator({{aa, 1}, {ib, 0}, {bb, 1}, {ja, 0}}, one_inv_sqrt_12);
+            fermiOp -= FermionOperator({{ja, 1}, {bb, 0}, {ib, 1}, {aa, 0}}, one_inv_sqrt_12);
 
-            antiHermitianOp += FermionOperator({{ab, 1}, {ia, 0}, {ba, 1}, {jb, 0}}, one_inv_sqrt_12);
-            antiHermitianOp -= FermionOperator({{jb, 1}, {ba, 0}, {ia, 1}, {ab, 0}}, one_inv_sqrt_12);
+            fermiOp += FermionOperator({{ab, 1}, {ia, 0}, {ba, 1}, {jb, 0}}, one_inv_sqrt_12);
+            fermiOp -= FermionOperator({{jb, 1}, {ba, 0}, {ia, 1}, {ab, 0}}, one_inv_sqrt_12);
 
-            auto pauliOp = jw->transform(std::shared_ptr<Observable>(&antiHermitianOp, [](Observable *) {}));
+            auto pauliOp = jw->transform(std::shared_ptr<Observable>(&fermiOp, [](Observable *) {}));
             if (std::dynamic_pointer_cast<PauliOperator>(pauliOp)->getTerms().size() != 0){
-              pool.push_back(pauliOp);
+              auto Op = std::dynamic_pointer_cast<Observable>(std::make_shared<FermionOperator>(fermiOp));
+              pool.push_back(Op);
             }
+            std::cout << pool.back()->toString() << "\n";
+            fermiOp = FermionOperator({{aa, 1}, {ia, 0}, {bb, 1}, {jb, 0}}, 0.5);
+            fermiOp -= FermionOperator({{jb, 1}, {bb, 0}, {ia, 1}, {aa, 0}}, 0.5);
 
-            antiHermitianOp = FermionOperator({{aa, 1}, {ia, 0}, {bb, 1}, {jb, 0}}, 0.5);
-            antiHermitianOp -= FermionOperator({{jb, 1}, {bb, 0}, {ia, 1}, {aa, 0}}, 0.5);
+            fermiOp += FermionOperator({{ab, 1}, {ib, 0}, {bb, 1}, {jb, 0}}, 0.5);
+            fermiOp -= FermionOperator({{jb, 1}, {bb, 0}, {ib, 1}, {ab, 0}}, 0.5);
 
-            antiHermitianOp += FermionOperator({{ab, 1}, {ib, 0}, {bb, 1}, {jb, 0}}, 0.5);
-            antiHermitianOp -= FermionOperator({{jb, 1}, {bb, 0}, {ib, 1}, {ab, 0}}, 0.5);
+            fermiOp += FermionOperator({{aa, 1}, {ib, 0}, {bb, 1}, {ja, 0}}, -0.5);
+            fermiOp -= FermionOperator({{ja, 1}, {bb, 0}, {ib, 1}, {aa, 0}}, -0.5);
 
-            antiHermitianOp += FermionOperator({{aa, 1}, {ib, 0}, {bb, 1}, {ja, 0}}, -0.5);
-            antiHermitianOp -= FermionOperator({{ja, 1}, {bb, 0}, {ib, 1}, {aa, 0}}, -0.5);
+            fermiOp += FermionOperator({{ab, 1}, {ia, 0}, {ba, 1}, {jb, 0}}, -0.5);
+            fermiOp -= FermionOperator({{jb, 1}, {ba, 0}, {ia, 1}, {ab, 0}}, -0.5);
 
-            antiHermitianOp += FermionOperator({{ab, 1}, {ia, 0}, {ba, 1}, {jb, 0}}, -0.5);
-            antiHermitianOp -= FermionOperator({{jb, 1}, {ba, 0}, {ia, 1}, {ab, 0}}, -0.5);
-
-            pauliOp = jw->transform(std::shared_ptr<Observable>(&antiHermitianOp, [](Observable *) {}));
+            pauliOp = jw->transform(std::shared_ptr<Observable>(&fermiOp, [](Observable *) {}));
             if (std::dynamic_pointer_cast<PauliOperator>(pauliOp)->getTerms().size() != 0){
-              pool.push_back(pauliOp);
+              auto Op = std::dynamic_pointer_cast<Observable>(std::make_shared<FermionOperator>(fermiOp));
+              pool.push_back(Op);
             }
+            std::cout << pool.back()->toString() << "\n";
           }
         }
       }

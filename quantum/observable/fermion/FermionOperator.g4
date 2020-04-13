@@ -24,7 +24,7 @@ COMMENT : '#' ~[\r\n] * EOL;
 REAL : ('-') ? INT ? '.' INT;
 
 /* Non-negative integer */
-INT : ('0'..'9') + ;
+INT : ('-') ? ('0'..'9') + ;
 
 /* Strings include numbers and slashes */
 

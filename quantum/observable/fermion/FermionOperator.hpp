@@ -200,9 +200,12 @@ public:
   const std::string description() const override {
       return "";
   }
-void fromOptions(const HeterogeneousMap& options) override {
+  void fromOptions(const HeterogeneousMap& options) override {
       return;
   }
+
+  std::shared_ptr<Observable>
+  commutator(std::shared_ptr<Observable> obs) override;
 
 };
 

@@ -262,6 +262,15 @@ FermionOperator::operator*=(const std::complex<double> v) noexcept {
   return *this;
 }
 
+std::shared_ptr<Observable> FermionOperator::commutator(std::shared_ptr<Observable> op) {
+
+  FermionOperator& A = *std::dynamic_pointer_cast<FermionOperator>(op);
+  std::shared_ptr<FermionOperator> commutatorHA =  std::make_shared<FermionOperator>((*this) * A - A * (*this));
+  //std::shared_ptr<Observable> commutatorObservable = std::dynamic_pointer_cast<Observable>(commutatorHA);
+  return std::dynamic_pointer_cast<Observable>(commutatorHA);
+
+}
+
 } // namespace quantum
 } // namespace xacc
 

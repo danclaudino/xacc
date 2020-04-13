@@ -19,6 +19,7 @@
 #include "ObservableTransform.hpp"
 #include "xacc.hpp"
 #include "xacc_service.hpp"
+#include "xacc_observable.hpp"
 #include "Circuit.hpp"
 
 #include <memory>
@@ -58,11 +59,26 @@ bool ADAPT_VQE::initialize(const HeterogeneousMap &parameters) {
     _threshold = parameters.get<double>("threshold");
   } 
   pool = parameters.getString("pool");
+
+  // Check if Observable is Fermion or Pauli and manipulate the pointer accordingly
+if (!std::dynamic_pointer_cast<FermionOperator>(observable) && observable->toString().find("^") != std::string::npos) {
+    // Case 1: observable is FermionOperator, but does not cast down to it
+    std::cout << observable->toString();
+    auto fermionObservable = xacc::quantum::getObservable("fermion", std::string("(-0.165494,-0)  2^ 1^ 2 1 "));
+    //observable = jw->transform(fermionObservable);
+    observable = std::dynamic_pointer_cast<Observable>(fermionObservable);
   
-  if (std::dynamic_pointer_cast<FermionOperator>(observable)) {
-    auto jw = xacc::getService<ObservableTransform>("jw");
-    observable = jw->transform(observable);
-  } 
+  } else if (observable->toString().find("X") != std::string::npos
+            || observable->toString().find("Y") != std::string::npos
+            || observable->toString().find("Z") != std::string::npos
+            && !std::dynamic_pointer_cast<PauliOperator>(observable)){
+    // Case 2: observable is PauliOperator, but does not cast down to it
+    // Not sure about the likelyhood of this happening, but want to cover all bases
+    auto pauliObservable = xacc::quantum::getObservable("pauli", observable->toString());
+    observable = std::dynamic_pointer_cast<Observable>(pauliObservable);
+
+  } // if Obser casts down, nothing is neededg
+
 
   return true;
 }
@@ -75,10 +91,8 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
   auto ansatzRegistry = xacc::getIRProvider("quantum");
   auto ansatzInstructions = ansatzRegistry->createComposite("ansatzCircuit");
-
   auto operatorPool = xacc::getService<OperatorPool>(pool);
   auto operators = operatorPool->generate(buffer->size(), nElectrons);
-  auto vqe = xacc::getAlgorithm("vqe");
   
   // instructions for mean-field state
   for (int i = nElectrons - 1; i >= 0; i--) {
@@ -88,25 +102,40 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
     ansatzInstructions->addInstruction(xGate);
   }
 
+//std::cout << observable.asPauli->toString();
   std::vector<double> x; // these are the thetas
   double oldEnergy = 0.0;
+  std::cout << "Observable\n\n" << observable->toString();
+        if(std::dynamic_pointer_cast<FermionOperator>(observable)){
+        std::cout << "Observable is fermion\n\n";
+      } else if (std::dynamic_pointer_cast<PauliOperator>(observable)) {
+        std::cout << "Observable is Pauli\n\n";
+      } else {
+std::cout << "Observable is Observable \n\n";
+      }
   for (int iter = 0; iter < 2; iter++){
 
+
     std::cout << "Iteration: " << iter + 1 << std::endl;
-    std::cout << "Computing [H, A]" << std::endl;
+    std::cout << "Computing [H, A]\n" << std::endl;
 
     // compute commutators
     int largestCommutatorIdx = 0;
     double largestCommutator = 0.0;
-    double gradientNorm = 0.0;
+    double gradientNorm = 0.0;;
+    
     for (int operatorIdx = 0; operatorIdx < operators.size(); operatorIdx++){
 
       //compute commutator for operatorIdx
-      PauliOperator& H = *std::dynamic_pointer_cast<PauliOperator>(observable).get();
-      PauliOperator& A = *std::dynamic_pointer_cast<PauliOperator>(operators[operatorIdx]).get();
-      PauliOperator commutator = H * A - A * H;
-      auto operatorCommutatorPtr = std::shared_ptr<Observable>(&commutator, [](Observable *) {});
+      //PauliOperator& H = *std::dynamic_pointer_cast<PauliOperator>(obs).get();
+      //PauliOperator& A = *std::dynamic_pointer_cast<PauliOperator>(operators[operatorIdx]).get();
+      //PauliOperator commutator = H * A - A * H;
+      //auto operatorCommutatorPtr = std::shared_ptr<Observable>(&commutator, [](Observable *) {});
 
+
+      
+      auto operatorCommutatorPtr = observable->commutator(operators[operatorIdx]);
+      
       auto grad_vqe_energy = xacc::getAlgorithm(
           "vqe", {std::make_pair("observable", operatorCommutatorPtr),
                   std::make_pair("optimizer", optimizer),
