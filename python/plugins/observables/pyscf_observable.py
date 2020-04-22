@@ -37,7 +37,7 @@ class PySCFObservable(xacc.Observable):
         mol.basis = inputParams['basis']
         scf_wfn = scf.RHF(mol) # needs to be changed for open-shells
         scf_wfn.conv_tol = 1e-8
-        scf.kernel() # runs RHF calculations
+        scf_wfn.kernel() # runs RHF calculations
         scf_e = scf_wfn.e_tot
         E_nucl = mol.energy_nuc()
 
@@ -58,6 +58,7 @@ class PySCFObservable(xacc.Observable):
         # Get orbital energies
         eps_a = scf_wfn.mo_energy
         eps_b = scf_wfn.mo_energy
+        
         eps = np.append(eps_a, eps_b)
 
         # Get orbital coefficients:

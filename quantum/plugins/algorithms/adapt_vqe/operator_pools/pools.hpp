@@ -20,6 +20,7 @@
 #include "xacc_observable.hpp"
 #include "FermionOperator.hpp"
 #include "ObservableTransform.hpp"
+#include <string>
 
 namespace xacc{
 namespace algorithm{
@@ -47,17 +48,18 @@ public:
     const double two_inv_sqrt_12 = 0.577350269189626;
     auto _nOccupied = (int)std::ceil(nElectrons / 2.0);
     auto _nVirtual = nQubits / 2 - _nOccupied;
+    auto _nOrbs = _nOccupied + _nVirtual;
 
     auto jw = xacc::getService<ObservableTransform>("jw");
     std::vector<std::shared_ptr<Observable>> pool;
 
     // single excitations
     for (int i = 0; i < _nOccupied; i++){
-      int ia = 2 * i;
-      int ib = 2 * i + 1;
+      int ia = i;
+      int ib = i + _nOrbs;
       for (int a = 0; a < _nVirtual; a++){
-        int aa = 2 * a + 2 * _nOccupied;
-        int ab = 2 * a + 2 * _nOccupied + 1;
+        int aa = a + _nOccupied;
+        int ab = a + _nOccupied + _nOrbs;
 
         // spin-adapted singles
         FermionOperator fermiOp;
@@ -72,24 +74,22 @@ public:
           auto Op = std::dynamic_pointer_cast<Observable>(std::make_shared<FermionOperator>(fermiOp));
           pool.push_back(Op);
         }
-        std::cout << pool.back()->toString() << "\n";
       }
-
     }
 
     // double excitations
     for (int i = 0; i < _nOccupied; i++){
-      int ia = 2 * i;
-      int ib = 2 * i + 1;
+      int ia = i;
+      int ib = i + _nOrbs;
       for (int j = i; j < _nOccupied; j++){
-        int ja = 2 * j;
-        int jb = 2 * j + 1;
+        int ja = j;
+        int jb = j + _nOrbs;
         for (int a = 0; a < _nVirtual; a++){
-          int aa = 2 * a + 2 * _nOccupied;
-          int ab = 2 * a + 2 * _nOccupied + 1;
+          int aa = a + _nOccupied;
+          int ab = a + _nOccupied + _nOrbs;
           for ( int b = a; b < _nVirtual; b++){
-            int ba = 2 * b + 2 * _nOccupied;
-            int bb = 2 * b + 2 * _nOccupied + 1;
+            int ba = b + _nOccupied;
+            int bb = b + _nOccupied + _nOrbs;
 
             FermionOperator fermiOp;
             fermiOp = FermionOperator({{aa, 1}, {ia, 0}, {ba, 1}, {ja, 0}}, two_inv_sqrt_12);
@@ -115,12 +115,13 @@ public:
               auto Op = std::dynamic_pointer_cast<Observable>(std::make_shared<FermionOperator>(fermiOp));
               pool.push_back(Op);
             }
-            std::cout << pool.back()->toString() << "\n";
+
+
             fermiOp = FermionOperator({{aa, 1}, {ia, 0}, {bb, 1}, {jb, 0}}, 0.5);
             fermiOp -= FermionOperator({{jb, 1}, {bb, 0}, {ia, 1}, {aa, 0}}, 0.5);
 
-            fermiOp += FermionOperator({{ab, 1}, {ib, 0}, {bb, 1}, {jb, 0}}, 0.5);
-            fermiOp -= FermionOperator({{jb, 1}, {bb, 0}, {ib, 1}, {ab, 0}}, 0.5);
+            fermiOp += FermionOperator({{ab, 1}, {ib, 0}, {ba, 1}, {ja, 0}}, 0.5);
+            fermiOp -= FermionOperator({{ja, 1}, {ba, 0}, {ib, 1}, {ab, 0}}, 0.5);
 
             fermiOp += FermionOperator({{aa, 1}, {ib, 0}, {bb, 1}, {ja, 0}}, -0.5);
             fermiOp -= FermionOperator({{ja, 1}, {bb, 0}, {ib, 1}, {aa, 0}}, -0.5);
@@ -133,7 +134,6 @@ public:
               auto Op = std::dynamic_pointer_cast<Observable>(std::make_shared<FermionOperator>(fermiOp));
               pool.push_back(Op);
             }
-            std::cout << pool.back()->toString() << "\n";
           }
         }
       }

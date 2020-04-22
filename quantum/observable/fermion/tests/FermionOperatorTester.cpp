@@ -18,6 +18,14 @@
 
 using namespace xacc::quantum;
 
+TEST(FermionOperatorTester, checkDanielBug) {
+
+    const std::string str = R"#((-0.165607,-0)  2^ 1^ 2 1 + (0.1202,0)  1^ 0^ 1 0 + (-0.0454063,-0)  3^ 0^ 2 1 + (0.168336,0)  2^ 0^ 2 0 + (0.0454063,0)  2^ 1^ 3 0 + (0.168336,0)  2^ 0^ 2 0 + (0.165607,0)  3^ 0^ 3 0 + (-0.0454063,-0)  3^ 0^ 2 1 + (-0.0454063,-0)  3^ 1^ 2 0 + (-0.0454063,-0)  3^ 1^ 2 0 + (0.165607,0)  2^ 1^ 2 1 + (-0.165607,-0)  3^ 0^ 3 0 + (-0.479678,-0)  3^ 3 + (-0.0454063,-0)  2^ 1^ 3 0 + (-0.174073,-0)  3^ 1^ 3 1 + (-0.0454063,-0)  2^ 0^ 3 1 + (0.1202,0)  1^ 0^ 1 0 + (0.0454063,0)  2^ 0^ 3 1 + (0.174073,0)  3^ 1^ 3 1 + (0.165607,0)  2^ 1^ 2 1 + (-0.0454063,-0)  2^ 1^ 3 0 + (-0.1202,-0)  3^ 2^ 3 2 + (0.1202,0)  3^ 2^ 3 2 + (-0.168336,-0)  2^ 0^ 2 0 + (0.1202,0)  3^ 2^ 3 2 + (-0.1202,-0)  3^ 2^ 3 2 + (0.0454063,0)  3^ 1^ 2 0 + (-1.24885,-0)  0^ 0 + (0.0454063,0)  3^ 1^ 2 0 + (-0.168336,-0)  2^ 0^ 2 0 + (0.165607,0)  3^ 0^ 3 0 + (-0.0454063,-0)  2^ 0^ 3 1 + (0.0454063,0)  2^ 0^ 3 1 + (-1.24885,-0)  2^ 2 + (0.0454063,0)  2^ 1^ 3 0 + (0.174073,0)  3^ 1^ 3 1 + (-0.479678,-0)  1^ 1 + (-0.174073,-0)  3^ 1^ 3 1 + (0.0454063,0)  3^ 0^ 2 1 + (-0.165607,-0)  3^ 0^ 3 0 + (0.0454063,0)  3^ 0^ 2 1 + (-0.165607,-0)  2^ 1^ 2 1 + (-0.1202,-0)  1^ 0^ 1 0 + (-0.1202,-0)  1^ 0^ 1 0 + (0.708024,0))#";
+    FermionOperator op(str);
+
+    std::cout << op.toString() << "\n";
+}
+
 TEST(FermionOperatorTester,checkSimple) {
 
   FermionOperator op(Operators{{3,1},{2,0}}, 2.2);
@@ -55,6 +63,30 @@ FermionOperator op2(s2);
 std::cout << op2.toString() << "\n";
 
 }
+
+TEST(FermionOperatorTester, checkMult) {
+    //FermionOperator op1("(-0.5,0)  3^ 2^ 0 1 + (0.5,-0)  1^ 0^ 2 3 + (0.5,-0)  0^ 1^ 3 2 + (0.5,0)  2^ 3^ 0 1 + (0.5,0)  3^ 3^ 1 1 + (-0.5,0)  1^ 1^ 3 3 + (-0.5,0)  1^ 0^ 3 2 + (-0.5,0)  2^ 3^ 1 0"), op2("(0.708024, 0)");
+    FermionOperator op1("3^ 2^ 3 2"), op2("0^ 3 1^ 2");
+
+    for (auto b : op1.getTerms()){std::cout << "First " << b.second.id() << "\n";}
+    for (auto b : op2.getTerms()){std::cout << "Second " << b.second.id() << "\n";}
+
+    FermionTerm mult;
+    for (auto a : op1.getTerms()){
+      for (auto b : op2.getTerms()){
+        mult = a.second * b.second;
+      }
+    }
+
+    for (auto k : mult.ops()){
+      std::cout << k.first << " " << k.second << "\n";
+    }
+
+    //auto mult = op1.getTerms().second * op2.getTerms().second;
+
+    std::cout << "Print op =" << (op1*op2).toString() << "\n\n";
+}
+
 
 TEST(FermionOperatorTester, checkFromStr2) {
     std::string src = ".12 0^ 1^ 0 1 - .12 0^ 1^ 1 0";

@@ -14,10 +14,10 @@
 #define XACC_QALLOC_HPP_
 
 #include <map>
-#include <string>
 
 namespace xacc {
 class AcceleratorBuffer;
+class Observable;
 namespace internal_compiler {
 
 class qreg {
@@ -25,14 +25,19 @@ protected:
   AcceleratorBuffer *buffer;
 
 public:
+  qreg() = default;
   qreg(const int n);
+  qreg (const qreg& other);
   int operator[](const int &i);
   AcceleratorBuffer *results();
   std::map<std::string, int> counts();
   double exp_val_z();
   void reset();
   void setName(const char *name);
+  void setNameAndStore(const char *name);
   void store();
+  void print();
+  double weighted_sum(Observable* obs);
 };
 
 } // namespace internal_compiler
@@ -41,5 +46,7 @@ public:
 xacc::internal_compiler::qreg qalloc(const int n) {
   return xacc::internal_compiler::qreg(n);
 }
+
+#define __qpu__ [[clang::syntax(qcor)]]
 
 #endif

@@ -68,6 +68,9 @@ void bind_ir(py::module &m) {
   py::class_<xacc::CompositeInstruction,
              std::shared_ptr<xacc::CompositeInstruction>>(
       m, "CompositeInstruction", "")
+      .def("nParameters", &xacc::CompositeInstruction::nParameters, "")
+      .def("nLogicalBits", &xacc::CompositeInstruction::nLogicalBits, "")
+      .def("nPhysicalBits", &xacc::CompositeInstruction::nPhysicalBits, "")
       .def("nInstructions", &xacc::CompositeInstruction::nInstructions, "")
       .def("getInstruction", &xacc::CompositeInstruction::getInstruction, "")
       .def("getInstructions", &xacc::CompositeInstruction::getInstructions, "")
@@ -208,6 +211,7 @@ void bind_ir(py::module &m) {
       .def("getComposites", &xacc::IR::getComposites,
            "Return the kernels in this IR")
       .def("mapBits", &xacc::IR::mapBits, "")
+      .def("getComposite", &xacc::IR::getComposite, "")
       .def("addComposite", &xacc::IR::addComposite, "");
 
   py::class_<xacc::InstructionIterator>(m, "InstructionIterator", "")

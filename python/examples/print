@@ -1,0 +1,1199 @@
+converged SCF energy = -1.11632556448611
+(-0.165607,-0)  1^ 2^ 1 2 + (0.1202,0)  1^ 0^ 0 1 + (-0.0454063,-0)  0^ 3^ 1 2 + (0.168336,0)  2^ 0^ 0 2 + (0.0454063,0)  1^ 2^ 3 0 + (0.168336,0)  0^ 2^ 2 0 + (0.165607,0)  0^ 3^ 3 0 + (-0.0454063,-0)  3^ 0^ 2 1 + (-0.0454063,-0)  1^ 3^ 0 2 + (-0.0454063,-0)  3^ 1^ 2 0 + (0.165607,0)  1^ 2^ 2 1 + (-0.165607,-0)  0^ 3^ 0 3 + (-0.479678,-0)  3^ 3 + (-0.0454063,-0)  1^ 2^ 0 3 + (-0.174073,-0)  1^ 3^ 1 3 + (-0.0454063,-0)  0^ 2^ 1 3 + (0.1202,0)  0^ 1^ 1 0 + (0.0454063,0)  0^ 2^ 3 1 + (0.174073,0)  1^ 3^ 3 1 + (0.165607,0)  2^ 1^ 1 2 + (-0.0454063,-0)  2^ 1^ 3 0 + (-0.1202,-0)  2^ 3^ 2 3 + (0.1202,0)  2^ 3^ 3 2 + (-0.168336,-0)  0^ 2^ 0 2 + (0.1202,0)  3^ 2^ 2 3 + (-0.1202,-0)  3^ 2^ 3 2 + (0.0454063,0)  1^ 3^ 2 0 + (-1.24885,-0)  0^ 0 + (0.0454063,0)  3^ 1^ 0 2 + (-0.168336,-0)  2^ 0^ 2 0 + (0.165607,0)  3^ 0^ 0 3 + (-0.0454063,-0)  2^ 0^ 3 1 + (0.0454063,0)  2^ 0^ 1 3 + (-1.24885,-0)  2^ 2 + (0.0454063,0)  2^ 1^ 0 3 + (0.174073,0)  3^ 1^ 1 3 + (-0.479678,-0)  1^ 1 + (-0.174073,-0)  3^ 1^ 3 1 + (0.0454063,0)  3^ 0^ 1 2 + (-0.165607,-0)  3^ 0^ 3 0 + (0.0454063,0)  0^ 3^ 2 1 + (-0.165607,-0)  2^ 1^ 2 1 + (-0.1202,-0)  0^ 1^ 0 1 + (-0.1202,-0)  1^ 0^ 1 0 + (0.708024,0)(-0.707107,0)  1^ 3 + (0.707107,0)  3^ 1 + (0.707107,0)  2^ 0 + (-0.707107,0)  0^ 2
+(-0.5,0)  3^ 2^ 0 1 + (0.5,-0)  1^ 0^ 2 3 + (0.5,-0)  0^ 1^ 3 2 + (0.5,0)  2^ 3^ 0 1 + (0.5,0)  3^ 3^ 1 1 + (-0.5,0)  1^ 1^ 3 3 + (-0.5,0)  1^ 0^ 3 2 + (-0.5,0)  2^ 3^ 1 0
+Iteration: 1
+Computing [H, A]
+
+NOPS 0site 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 2site 3
+NOPS 2site 2
+NOPS 0site 0
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 1site 1
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+second 1 1 ca 0 1
+NOPS 1site 2
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 2
+second 1 2 ca 0 2
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+NOPS 1site 2
+NOPS 1site 0
+NOPS 2site 1
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 0
+NOPS 2site 1
+NOPS 2site 3
+NOPS 0site 2
+NOPS 0site 0
+NOPS 0site 2
+NOPS 2site 1
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 2site 2
+NOPS 0site 0
+NOPS 0site 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 2site 3
+NOPS 2site 2
+NOPS 0site 0
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+NOPS 1site 2
+NOPS 1site 0
+NOPS 2site 1
+NOPS 2site 3
+NOPS 0site 2
+NOPS 0site 0
+NOPS 0site 0
+NOPS 0site 2
+NOPS 1site 1
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+second 1 1 ca 0 1
+NOPS 1site 2
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 2
+second 1 2 ca 0 2
+NOPS 0site 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 2site 3
+NOPS 0site 2
+NOPS 0site 0
+NOPS 0site 0
+NOPS 0site 2
+NOPS 0site 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 2site 3
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 0
+NOPS 2site 1
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 0site 2
+NOPS 2site 0
+NOPS 0site 1
+NOPS 0site 3
+NOPS 0site 3
+NOPS 2site 2
+NOPS 2site 0
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 1site 3
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+second 1 0 ca 0 0
+NOPS 1site 0
+NOPS 0site 1
+NOPS 0site 3
+NOPS 0site 1
+NOPS 2site 2
+NOPS 2site 0
+NOPS 1site 1
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+second 1 1 ca 0 1
+NOPS 1site 2
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 2
+second 1 2 ca 0 2
+NOPS 2site 1
+NOPS 0site 3
+NOPS 2site 2
+NOPS 0site 0
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 0site 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 2site 3
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 0
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 1site 3
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+second 1 0 ca 0 0
+NOPS 1site 0
+NOPS 1site 1
+NOPS 1site 3
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 2
+NOPS 1site 1
+NOPS 1site 3
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 2
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+NOPS 1site 2
+NOPS 1site 0
+NOPS 0site 1
+NOPS 2site 3
+NOPS 2site 2
+NOPS 0site 0
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 2site 1
+NOPS 2site 3
+NOPS 0site 2
+NOPS 0site 0
+NOPS 0site 0
+NOPS 2site 1
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 0site 2
+NOPS 0site 0
+NOPS 0site 0
+NOPS 0site 2
+NOPS 2site 1
+NOPS 2site 3
+NOPS 0site 2
+NOPS 0site 0
+NOPS 0site 2
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 1site 3
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+second 1 0 ca 0 0
+NOPS 1site 0
+NOPS 0site 1
+NOPS 2site 3
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 0
+NOPS 2site 1
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 0site 2
+NOPS 2site 0
+NOPS 2site 1
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 0
+NOPS 2site 1
+NOPS 0site 3
+NOPS 2site 2
+NOPS 0site 0
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 1site 3
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+second 1 0 ca 0 0
+NOPS 1site 0
+NOPS 0site 1
+NOPS 0site 3
+NOPS 0site 1
+NOPS 2site 2
+NOPS 2site 0
+NOPS 1site 1
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+second 1 1 ca 0 1
+NOPS 1site 2
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 2
+second 1 2 ca 0 2
+NOPS 0site 1
+NOPS 0site 3
+NOPS 0site 3
+NOPS 0site 1
+NOPS 2site 2
+NOPS 0site 0
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 0site 1
+NOPS 0site 3
+NOPS 0site 3
+NOPS 2site 2
+NOPS 2site 0
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+NOPS 1site 2
+NOPS 1site 0
+NOPS 0site 1
+NOPS 2site 3
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 0
+NOPS 1site 1
+NOPS 1site 3
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 2
+NOPS 0site 1
+NOPS 0site 3
+NOPS 0site 3
+NOPS 0site 1
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 0
+NOPS 1site 1
+NOPS 1site 3
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 2
+NOPS 0site 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 2site 3
+NOPS 2site 2
+NOPS 0site 0
+NOPS 2site 1
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 2site 2
+NOPS 0site 0
+NOPS 2site 2
+second 1 2 ca 0 2
+(0.117102,0)  1^ 2^ 3^ 2 1 1 + (0.0849942,0)  3^ 2^ 1^ 3 2 3 + (-0.88307,-0)  0^ 2^ 0 0 + (-0.88307,-0)  0^ 3^ 0 1 + (0.117102,0)  3^ 0^ 2^ 0 3 0 + (0.119032,0)  2^ 0^ 1^ 2 0 3 + (0.88307,0)  2^ 0^ 2 2 + (-0.88307,-0)  2^ 3^ 2 1 + (0.88307,0)  2^ 1^ 2 3 + (-0.0321071,0)  2^ 1^ 0^ 0 3 2 + (0.0321071,0)  2^ 1^ 3^ 0 3 1 + (0.0321071,0)  0^ 3^ 2^ 2 1 0 + (-0.0321071,0)  0^ 3^ 1^ 2 1 3 + (0.117102,0)  2^ 1^ 0^ 2 1 2 + (-0.0321071,-0)  0^ 3^ 2^ 1 2 0 + (0.117102,0)  1^ 2^ 0^ 1 2 2 + (-0.0849942,0)  3^ 2^ 0^ 2 3 2 + (0.339184,0)  3^ 1^ 3 3 + (-0.0321071,-0)  3^ 0^ 2^ 2 1 0 + (0.123088,0)  1^ 3^ 0^ 1 3 2 + (0.339184,0)  3^ 0^ 3 2 + (0.0321071,0)  2^ 1^ 0^ 3 0 2 + (-0.123088,-0)  1^ 3^ 2^ 1 3 0 + (-0.0849942,0)  2^ 3^ 0^ 3 2 2 + (-0.500649,0)  0^ 2 + (-0.119032,0)  2^ 0^ 1^ 0 2 3 + (-0.0849942,0)  2^ 3^ 1^ 3 2 3 + (-0.0321071,-0)  1^ 2^ 3^ 0 3 1 + (-0.500649,0)  1^ 3 + (-0.0321071,-0)  2^ 1^ 3^ 3 0 1 + (0.0849942,0)  2^ 3^ 1^ 2 3 3 + (0.117102,0)  0^ 3^ 2^ 3 0 0 + (0.0849942,0)  0^ 1^ 2^ 1 0 0 + (0.0321071,0)  1^ 2^ 0^ 0 3 2 + (0.0321071,0)  1^ 2^ 3^ 3 0 1 + (-0.123088,0)  1^ 3^ 0^ 3 1 2 + (-0.117102,-0)  0^ 3^ 2^ 0 3 0 + (0.500649,0)  2^ 0 + (0.117102,0)  2^ 1^ 3^ 1 2 1 + (-0.339184,-0)  1^ 2^ 1 0 + (-0.117102,0)  1^ 2^ 0^ 2 1 2 + (0.0321071,0)  0^ 3^ 1^ 1 2 3 + (0.0321071,0)  3^ 0^ 2^ 1 2 0 + (0.0849942,0)  2^ 3^ 0^ 2 3 2 + (-0.0321071,0)  1^ 2^ 0^ 3 0 2 + (0.117102,0)  0^ 3^ 1^ 0 3 3 + (0.0321071,0)  3^ 0^ 1^ 2 1 3 + (-0.119032,-0)  0^ 2^ 3^ 0 2 1 + (-0.117102,-0)  3^ 0^ 2^ 3 0 0 + (0.123088,0)  3^ 1^ 2^ 1 3 0 + (0.339184,0)  1^ 0^ 1 2 + (0.0849942,0)  0^ 1^ 3^ 1 0 1 + (0.119032,0)  0^ 2^ 3^ 2 0 1 + (0.500649,0)  3^ 1 + (-0.117102,0)  0^ 3^ 1^ 3 0 3 + (-0.339184,-0)  1^ 3^ 1 1 + (-0.0849942,-0)  0^ 1^ 3^ 0 1 1 + (-0.339184,-0)  3^ 2^ 3 0 + (0.123088,0)  3^ 1^ 0^ 3 1 2 + (0.0849942,0)  1^ 0^ 3^ 0 1 1 + (-0.0321071,0)  3^ 0^ 1^ 1 2 3 + (0.88307,0)  0^ 1^ 0 3 + (-0.0849942,-0)  1^ 0^ 3^ 1 0 1 + (-0.0849942,-0)  1^ 0^ 2^ 1 0 0
+HERE[]
+VQE 
+VQE 
+HERE[]
+[H,0] = 1.45398e-48
+NOPS 2site 3
+NOPS 0site 1
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 0site 0
+second 0 0 ca 1 0
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 0site 0
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 0site 1
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 2site 2
+NOPS 2site 3
+NOPS 0site 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 1site 1
+NOPS 0site 1
+NOPS 2site 2
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 0
+NOPS 1site 1
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 3
+NOPS 1site 2
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+second 1 1 ca 0 1
+NOPS 2site 3
+second 0 3 ca 1 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 1site 1
+NOPS 1site 1
+NOPS 1site 2
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 0
+second 1 0 ca 0 0
+NOPS 1site 2
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 2
+second 1 2 ca 0 2
+NOPS 1site 0
+NOPS 1site 0
+NOPS 1site 2
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+NOPS 1site 2
+NOPS 0site 3
+NOPS 2site 1
+NOPS 2site 0
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 0site 3
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 1site 3
+NOPS 2site 1
+NOPS 2site 1
+NOPS 0site 2
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 0site 3
+NOPS 2site 3
+NOPS 2site 1
+NOPS 0site 0
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 2site 1
+NOPS 0site 2
+NOPS 0site 0
+NOPS 2site 3
+NOPS 2site 3
+NOPS 2site 1
+NOPS 2site 1
+NOPS 0site 2
+NOPS 0site 3
+NOPS 0site 0
+NOPS 2site 2
+NOPS 2site 1
+NOPS 0site 0
+NOPS 2site 2
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 1site 3
+NOPS 2site 1
+NOPS 2site 1
+NOPS 2site 2
+NOPS 2site 3
+NOPS 0site 1
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 0site 0
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 0site 0
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 0site 1
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 2site 2
+NOPS 2site 3
+NOPS 0site 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 1site 1
+NOPS 0site 1
+NOPS 2site 2
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 0
+second 1 0 ca 0 0
+NOPS 1site 2
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 2
+second 1 2 ca 0 2
+NOPS 1site 0
+NOPS 1site 0
+NOPS 1site 2
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+NOPS 1site 2
+NOPS 2site 3
+NOPS 2site 1
+NOPS 0site 0
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 2site 1
+NOPS 0site 2
+NOPS 0site 0
+NOPS 2site 3
+NOPS 2site 3
+NOPS 2site 1
+NOPS 2site 1
+NOPS 0site 2
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 2site 3
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 0
+NOPS 1site 1
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 3
+NOPS 1site 2
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+second 1 1 ca 0 1
+NOPS 2site 3
+second 0 3 ca 1 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 1site 1
+NOPS 1site 1
+NOPS 1site 2
+NOPS 2site 3
+NOPS 0site 1
+NOPS 0site 2
+NOPS 0site 0
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 0site 0
+NOPS 0site 2
+NOPS 0site 0
+NOPS 2site 3
+NOPS 2site 3
+NOPS 0site 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 1site 1
+NOPS 0site 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 0site 0
+NOPS 0site 2
+NOPS 0site 2
+NOPS 0site 1
+NOPS 2site 3
+NOPS 2site 3
+NOPS 0site 1
+NOPS 0site 2
+NOPS 2site 0
+NOPS 2site 0
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 3
+NOPS 2site 3
+NOPS 0site 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 1site 1
+NOPS 0site 1
+NOPS 0site 2
+NOPS 0site 1
+NOPS 2site 3
+NOPS 0site 3
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 0site 2
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 2site 1
+NOPS 2site 0
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 1site 3
+NOPS 2site 1
+NOPS 2site 1
+NOPS 0site 2
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 0site 3
+NOPS 0site 3
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 2
+NOPS 0site 1
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 2site 0
+NOPS 2site 0
+NOPS 2site 2
+NOPS 0site 3
+NOPS 0site 1
+NOPS 1site 3
+NOPS 0site 1
+NOPS 0site 3
+NOPS 1site 1
+NOPS 0site 1
+NOPS 2site 2
+NOPS 1site 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 2
+NOPS 1site 0
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+second 1 0 ca 0 0
+NOPS 1site 3
+NOPS 1site 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 2site 1
+second 0 1 ca 1 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 1site 0
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 1
+NOPS 0site 3
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 2
+NOPS 0site 1
+NOPS 2site 0
+NOPS 2site 2
+NOPS 0site 3
+NOPS 0site 1
+NOPS 1site 3
+NOPS 0site 1
+NOPS 0site 3
+NOPS 1site 1
+NOPS 0site 1
+NOPS 0site 3
+NOPS 2site 0
+NOPS 2site 2
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 0
+NOPS 1site 1
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 3
+NOPS 1site 2
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+second 1 1 ca 0 1
+NOPS 2site 3
+second 0 3 ca 1 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 1site 1
+NOPS 1site 1
+NOPS 1site 2
+NOPS 0site 3
+NOPS 2site 1
+NOPS 0site 0
+NOPS 0site 3
+NOPS 2site 1
+NOPS 2site 2
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 1site 3
+NOPS 2site 1
+NOPS 2site 1
+NOPS 2site 2
+NOPS 2site 3
+NOPS 0site 1
+NOPS 0site 2
+NOPS 2site 0
+NOPS 2site 0
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 3
+NOPS 2site 3
+NOPS 0site 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 1site 1
+NOPS 0site 1
+NOPS 0site 2
+NOPS 0site 1
+NOPS 2site 3
+NOPS 1site 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 2
+NOPS 1site 0
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+second 1 0 ca 0 0
+NOPS 1site 3
+NOPS 1site 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 2site 1
+second 0 1 ca 1 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 1site 0
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 1
+NOPS 1site 3
+NOPS 1site 1
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 1site 1
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+NOPS 1site 3
+NOPS 1site 1
+NOPS 1site 1
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 1
+second 1 1 ca 0 1
+NOPS 1site 3
+NOPS 1site 3
+NOPS 1site 1
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 1site 1
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+NOPS 1site 3
+NOPS 1site 1
+NOPS 1site 1
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 1
+second 1 1 ca 0 1
+NOPS 1site 3
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 0
+second 1 0 ca 0 0
+NOPS 1site 2
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 2
+second 1 2 ca 0 2
+NOPS 1site 0
+NOPS 1site 0
+NOPS 1site 2
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+NOPS 1site 2
+NOPS 2site 3
+NOPS 0site 1
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 0site 0
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 0site 0
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 0site 1
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 2site 2
+NOPS 2site 3
+NOPS 0site 1
+NOPS 0site 1
+NOPS 2site 2
+NOPS 2site 3
+NOPS 2site 1
+NOPS 0site 0
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 2site 1
+NOPS 0site 2
+NOPS 0site 0
+NOPS 2site 3
+NOPS 2site 3
+NOPS 2site 1
+NOPS 2site 1
+NOPS 0site 2
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 2site 3
+NOPS 0site 3
+NOPS 0site 0
+NOPS 0site 2
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 2site 1
+NOPS 0site 0
+NOPS 0site 3
+NOPS 2site 1
+NOPS 0site 2
+NOPS 0site 0
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 0site 3
+NOPS 2site 1
+NOPS 2site 1
+NOPS 0site 2
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 0site 3
+NOPS 0site 0
+NOPS 2site 3
+NOPS 2site 1
+NOPS 0site 0
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 2site 1
+NOPS 0site 2
+NOPS 2site 3
+NOPS 2site 1
+NOPS 2site 1
+NOPS 0site 2
+NOPS 1site 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 2
+NOPS 1site 0
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+second 1 0 ca 0 0
+NOPS 1site 3
+NOPS 1site 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 2site 1
+second 0 1 ca 1 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 1site 0
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 1
+NOPS 2site 3
+NOPS 0site 1
+NOPS 2site 0
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 3
+NOPS 2site 3
+NOPS 0site 1
+NOPS 0site 1
+NOPS 0site 2
+NOPS 0site 1
+NOPS 2site 3
+NOPS 0site 3
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 0site 2
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 2site 1
+NOPS 2site 0
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 1site 3
+NOPS 2site 1
+NOPS 2site 1
+NOPS 0site 2
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 0site 3
+NOPS 0site 3
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 0site 2
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 2site 1
+NOPS 2site 0
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 1site 3
+NOPS 2site 1
+NOPS 2site 1
+NOPS 0site 2
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 0site 3
+NOPS 0site 3
+NOPS 0site 0
+NOPS 2site 2
+NOPS 2site 1
+NOPS 0site 0
+NOPS 0site 3
+NOPS 2site 1
+NOPS 2site 2
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 1site 3
+NOPS 2site 1
+NOPS 2site 1
+NOPS 2site 2
+NOPS 1site 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 2
+NOPS 1site 0
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+second 1 0 ca 0 0
+NOPS 1site 3
+NOPS 1site 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 2site 1
+second 0 1 ca 1 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 1site 0
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 1
+NOPS 0site 3
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 2
+NOPS 0site 1
+NOPS 2site 0
+NOPS 2site 2
+NOPS 0site 3
+NOPS 0site 1
+NOPS 1site 3
+NOPS 0site 1
+NOPS 0site 3
+NOPS 1site 1
+NOPS 0site 1
+NOPS 0site 3
+NOPS 2site 0
+NOPS 2site 2
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 0
+NOPS 1site 1
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 3
+NOPS 1site 2
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+second 1 1 ca 0 1
+NOPS 2site 3
+second 0 3 ca 1 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 1site 1
+NOPS 1site 1
+NOPS 1site 2
+NOPS 0site 3
+NOPS 0site 0
+NOPS 2site 2
+NOPS 0site 1
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 0site 0
+NOPS 0site 3
+NOPS 0site 0
+NOPS 0site 3
+NOPS 0site 1
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 2site 2
+NOPS 0site 3
+NOPS 0site 1
+NOPS 1site 3
+NOPS 0site 1
+NOPS 0site 3
+NOPS 1site 1
+NOPS 0site 1
+NOPS 0site 3
+NOPS 0site 0
+NOPS 2site 2
+NOPS 0site 3
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 2
+NOPS 0site 1
+NOPS 2site 0
+NOPS 2site 2
+NOPS 0site 3
+NOPS 0site 1
+NOPS 1site 3
+NOPS 0site 1
+NOPS 0site 3
+NOPS 1site 1
+NOPS 0site 1
+NOPS 0site 3
+NOPS 2site 0
+NOPS 2site 2
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 0
+second 1 0 ca 0 0
+NOPS 1site 2
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 2
+second 1 2 ca 0 2
+NOPS 1site 0
+NOPS 1site 0
+NOPS 1site 2
+NOPS 1site 3
+second 0 3 ca 1 3
+NOPS 1site 1
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+NOPS 1site 1
+second 0 1 ca 1 1
+NOPS 1site 3
+NOPS 1site 2
+NOPS 2site 3
+NOPS 0site 1
+NOPS 0site 2
+NOPS 2site 0
+NOPS 2site 0
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 2site 3
+NOPS 2site 3
+NOPS 0site 1
+NOPS 0site 1
+NOPS 0site 2
+NOPS 0site 1
+NOPS 2site 3
+NOPS 1site 3
+NOPS 1site 1
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 1site 1
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+NOPS 1site 3
+NOPS 1site 1
+NOPS 1site 1
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 1
+second 1 1 ca 0 1
+NOPS 1site 3
+NOPS 0site 3
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 0site 2
+NOPS 0site 1
+NOPS 0site 1
+NOPS 0site 2
+NOPS 2site 0
+NOPS 2site 0
+NOPS 0site 2
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 0site 3
+NOPS 0site 1
+NOPS 0site 3
+NOPS 0site 1
+NOPS 0site 3
+NOPS 1site 1
+NOPS 0site 1
+NOPS 0site 2
+NOPS 0site 1
+NOPS 0site 3
+NOPS 2site 0
+second 1 0 ca 0 0
+NOPS 1site 3
+NOPS 1site 1
+NOPS 1site 0
+second 0 0 ca 1 0
+NOPS 1site 3
+second 1 3 ca 0 3
+NOPS 1site 1
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 0
+NOPS 1site 3
+NOPS 1site 1
+NOPS 1site 1
+NOPS 1site 2
+second 0 2 ca 1 2
+NOPS 1site 1
+second 1 1 ca 0 1
+NOPS 1site 3
+NOPS 2site 3
+NOPS 0site 1
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 0site 0
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 0site 0
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 0site 1
+NOPS 2site 2
+second 1 2 ca 0 2
+NOPS 2site 2
+NOPS 2site 3
+NOPS 0site 1
+NOPS 2site 3
+second 1 3 ca 0 3
+NOPS 1site 1
+NOPS 0site 1
+NOPS 2site 2
+NOPS 0site 3
+NOPS 0site 0
+NOPS 2site 2
+NOPS 2site 1
+NOPS 0site 0
+NOPS 2site 2
+NOPS 0site 3
+NOPS 2site 1
+second 1 1 ca 0 1
+NOPS 1site 3
+NOPS 2site 1
+NOPS 2site 1
+NOPS 2site 2
+(-0.0601,0)  3^ 2^ 0^ 1^ 3 2 3 2 + (-0.624425,-0)  0^ 2^ 3^ 0 0 1 + (-0.624425,0)  2^ 0^ 1^ 2 3 2 + (0.624425,0)  0^ 3^ 2^ 0 0 1 + (-0.0601,-0)  1^ 0^ 2^ 3^ 1 0 0 1 + (0.0601,0)  1^ 0^ 3^ 2^ 1 0 0 1 + (-0.354012,0)  2^ 3^ 1 0 + (-0.354012,0)  1^ 0^ 3 2 + (0.354012,0)  3^ 3^ 1 1 + (0.0227031,0)  0^ 3^ 1^ 1^ 1 2 3 3 + (0.0601,0)  1^ 0^ 2^ 3^ 0 1 0 1 + (-0.0227031,-0)  2^ 1^ 3^ 3^ 3 0 1 1 + (-0.624425,0)  2^ 1^ 0^ 2 2 3 + (-0.0601,0)  2^ 3^ 0^ 1^ 2 3 3 2 + (0.239839,0)  3^ 1^ 0^ 3 3 2 + (-0.0227031,-0)  1^ 2^ 3^ 3^ 0 3 1 1 + (0.0601,0)  3^ 2^ 0^ 1^ 2 3 3 2 + (0.624425,0)  0^ 2^ 3^ 0 1 0 + (-0.0227031,0)  0^ 3^ 1^ 1^ 2 1 3 3 + (0.0601,0)  2^ 3^ 1^ 0^ 3 2 2 3 + (-0.0601,-0)  0^ 1^ 2^ 3^ 0 1 0 1 + (0.0601,0)  3^ 2^ 1^ 0^ 2 3 2 3 + (-0.239839,0)  3^ 1^ 0^ 3 2 3 + (-0.0601,0)  2^ 3^ 1^ 0^ 2 3 2 3 + (-0.0601,0)  1^ 0^ 3^ 2^ 0 1 0 1 + (0.0227031,0)  1^ 2^ 3^ 3^ 3 0 1 1 + (0.0227031,0)  3^ 0^ 1^ 1^ 2 1 3 3 + (0.0227031,0)  2^ 1^ 3^ 3^ 0 3 1 1 + (0.239839,0)  1^ 3^ 2^ 1 0 1 + (0.239839,0)  1^ 2^ 3^ 1 1 0 + (-0.354012,0)  1^ 1^ 3 3 + (-0.239839,-0)  1^ 2^ 3^ 1 0 1 + (0.0601,0)  0^ 1^ 3^ 2^ 0 1 0 1 + (-0.0227031,0)  3^ 0^ 1^ 1^ 1 2 3 3 + (-0.354012,0)  3^ 2^ 0 1 + (-0.0601,0)  3^ 2^ 1^ 0^ 3 2 2 3 + (0.354012,0)  0^ 1^ 3 2 + (0.354012,0)  1^ 0^ 2 3 + (0.0601,0)  2^ 3^ 0^ 1^ 3 2 3 2 + (0.354012,0)  2^ 3^ 0 1
+HERE[]
+VQE 
+VQE 
+HERE[]
+[H,1] = 0
+Norm of gradient vector: 1.45398e-48a.u.
+ADAPT-VQE converged in 0 iterations.
+ADAPT-VQE energy:0 a.u.

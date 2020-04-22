@@ -123,15 +123,29 @@ private:
 
 namespace xacc {
 // Public GOAT pulse optimization interface
-class PulseOptimGOAT : public PulseOptim
+class PulseOptimGOAT : public Optimizer
 {   
 public:
     const std::string name() const override { return "GOAT"; }
     const std::string description() const override { return ""; }
-    bool initialize(const HeterogeneousMap& in_options) override;
+    void setOptions(const HeterogeneousMap& in_options) override;
     OptResult optimize() override;
+    OptResult optimize(OptFunction& function) override { return optimize(); }
+
 private:
     std::unique_ptr<GOAT_PulseOptim> m_goatOptimizer;
     std::unique_ptr<GoatHamiltonian> m_hamiltonian;
+};
+
+class PauliUnitaryMatrixUtil : public UnitaryMatrixUtil
+{
+public:
+    const std::string name() const override { return "Pauli"; }
+    const std::string description() const override { return ""; }
+    Eigen::MatrixXcd fromString(const std::string& in_unitaryString, int in_dimension) override {
+        return GOAT_PulseOptim::constructMatrixFromPauliString(in_unitaryString, in_dimension);
+    }
+    
+    Eigen::MatrixXcd fromHeterogeneousMap(const HeterogeneousMap& in_options, int in_dimension, const std::string& in_fieldName) override;
 };
 }

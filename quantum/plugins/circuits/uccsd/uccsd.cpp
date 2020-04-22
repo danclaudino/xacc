@@ -102,7 +102,7 @@ bool UCCSD::expand(const xacc::HeterogeneousMap &runtimeOptions) {
         OpType op1{{vt, 1}, {ot, 0}}, op2{{ot, 1}, {vt, 0}};
         FermionOperator op(op1, 1.0, singleParams[count]);
         FermionOperator opp(op2, -1., singleParams[count]);
-
+        std::cout << op.toString() << " " << opp.toString() << "\n";
         OpType op3{{vt, 1}, {ot, 0}, {vo, 1}, {oo, 0}},
             op4{{oo, 1}, {vo, 0}, {ot, 1}, {vt, 0}};
         FermionOperator oppp(op3, -1., doubleParams1[count]);

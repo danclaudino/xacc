@@ -1,6 +1,6 @@
 grammar FermionOperator;
 
-fermionSrc : term(plusorminus term) *;
+fermionSrc : term ( plusorminus term ) *;
 
 plusorminus : '+' | '-';
 
@@ -8,7 +8,9 @@ term : coeff ? (fermion) *;
 
 fermion : op;
 
-op : INT '^' | INT;
+op : INT carat?;
+
+carat : '^';
 
 coeff : complex | real;
 

@@ -18,37 +18,30 @@
 #include "Observable.hpp"
 #include "Algorithm.hpp"
 #include "PauliOperator.hpp"
+#include "xacc_observable.hpp"
 
 using namespace xacc;
+using namespace xacc::quantum;
 
 TEST(AdaptVQETester, checkSimple) {
-//   if (xacc::hasAccelerator("qpp")) {
-    auto acc = xacc::getAccelerator("tnqvm", {std::make_pair("vqe-mode",true)});
-    auto buffer = xacc::qalloc(4);//->createBuffer("q", 4);
 
-    //auto compiler = xacc::getCompiler("xasm");
+  auto acc = xacc::getAccelerator("tnqvm", {std::make_pair("vqe-mode",true)});
+  auto buffer = xacc::qalloc(4);
+  auto optimizer = xacc::getOptimizer("nlopt");
+  auto adapt_vqe = xacc::getService<Algorithm>("adapt-vqe");
 
-    //auto ir = compiler->compile(rucc, nullptr);
-    //auto ruccsd = ir->getComposite("f");
+  const std::string str = "(-0.165607,-0)  1^ 2^ 1 2 + (0.1202,0)  1^ 0^ 0 1 + (-0.0454063,-0)  0^ 3^ 1 2 + (0.168336,0)  2^ 0^ 0 2 + (0.0454063,0)  1^ 2^ 3 0 + (0.168336,0)  0^ 2^ 2 0 + (0.165607,0)  0^ 3^ 3 0 + (-0.0454063,-0)  3^ 0^ 2 1 + (-0.0454063,-0)  1^ 3^ 0 2 + (-0.0454063,-0)  3^ 1^ 2 0 + (0.165607,0)  1^ 2^ 2 1 + (-0.165607,-0)  0^ 3^ 0 3 + (-0.479678,-0)  3^ 3 + (-0.0454063,-0)  1^ 2^ 0 3 + (-0.174073,-0)  1^ 3^ 1 3 + (-0.0454063,-0)  0^ 2^ 1 3 + (0.1202,0)  0^ 1^ 1 0 + (0.0454063,0)  0^ 2^ 3 1 + (0.174073,0)  1^ 3^ 3 1 + (0.165607,0)  2^ 1^ 1 2 + (-0.0454063,-0)  2^ 1^ 3 0 + (-0.1202,-0)  2^ 3^ 2 3 + (0.1202,0)  2^ 3^ 3 2 + (-0.168336,-0)  0^ 2^ 0 2 + (0.1202,0)  3^ 2^ 2 3 + (-0.1202,-0)  3^ 2^ 3 2 + (0.0454063,0)  1^ 3^ 2 0 + (-1.24885,-0)  0^ 0 + (0.0454063,0)  3^ 1^ 0 2 + (-0.168336,-0)  2^ 0^ 2 0 + (0.165607,0)  3^ 0^ 0 3 + (-0.0454063,-0)  2^ 0^ 3 1 + (0.0454063,0)  2^ 0^ 1 3 + (-1.24885,-0)  2^ 2 + (0.0454063,0)  2^ 1^ 0 3 + (0.174073,0)  3^ 1^ 1 3 + (-0.479678,-0)  1^ 1 + (-0.174073,-0)  3^ 1^ 3 1 + (0.0454063,0)  3^ 0^ 1 2 + (-0.165607,-0)  3^ 0^ 3 0 + (0.0454063,0)  0^ 3^ 2 1 + (-0.165607,-0)  2^ 1^ 2 1 + (-0.1202,-0)  0^ 1^ 0 1 + (-0.1202,-0)  1^ 0^ 1 0 + (0.708024,0)";
+  auto H = xacc::quantum::getObservable("fermion", str);
 
-    auto optimizer = xacc::getOptimizer("nlopt");
-    std::shared_ptr<Observable> observable = std::make_shared<xacc::quantum::PauliOperator>();//= std::make_shared<xacc::quantum::PauliOperator>();
-    observable->fromString(
-        "(0.174073,0) Z2 Z3 + (0.1202,0) Z1 Z3 + (0.165607,0) Z1 Z2 + "
-        "(0.165607,0) Z0 Z3 + (0.1202,0) Z0 Z2 + (-0.0454063,0) Y0 Y1 X2 X3 + "
-        "(-0.220041,0) Z3 + (-0.106477,0) + (0.17028,0) Z0 + (-0.220041,0) Z2 "
-        "+ (0.17028,0) Z1 + (-0.0454063,0) X0 X1 Y2 Y3 + (0.0454063,0) X0 Y1 "
-        "Y2 X3 + (0.168336,0) Z0 Z1 + (0.0454063,0) Y0 X1 X2 Y3");
 
-    auto adapt_vqe = xacc::getService<Algorithm>("adapt-vqe");
-    EXPECT_TRUE(adapt_vqe->initialize({std::make_pair("accelerator",acc),
-                                std::make_pair("observable", observable),
+  EXPECT_TRUE(adapt_vqe->initialize({std::make_pair("accelerator",acc),
+                                std::make_pair("observable", H),
                                 std::make_pair("optimizer", optimizer),
                                 std::make_pair("pool", "uccsd"),
                                 std::make_pair("nElectrons", 2)}));
-    adapt_vqe->execute(buffer);
-    EXPECT_NEAR(-1.13717, buffer->getInformation("opt-val").as<double>(), 1e-4);
-//   }
+  adapt_vqe->execute(buffer);
+  EXPECT_NEAR(-1.13717, buffer->getInformation("opt-val").as<double>(), 1e-4);
+  
 }
 
 int main(int argc, char **argv) {
