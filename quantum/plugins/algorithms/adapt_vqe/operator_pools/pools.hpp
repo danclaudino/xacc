@@ -20,6 +20,7 @@
 #include "xacc_observable.hpp"
 #include "FermionOperator.hpp"
 #include "ObservableTransform.hpp"
+#include <memory>
 #include <string>
 
 namespace xacc{
@@ -43,14 +44,9 @@ public:
   std::vector<std::shared_ptr<Observable>>
   generate(const int &nQubits, const int &nElectrons) override {
     
-    const double inv_sqrt_2 = 0.707106781186548;
-    const double one_inv_sqrt_12 = 0.288675134594813;
-    const double two_inv_sqrt_12 = 0.577350269189626;
     auto _nOccupied = (int)std::ceil(nElectrons / 2.0);
     auto _nVirtual = nQubits / 2 - _nOccupied;
     auto _nOrbs = _nOccupied + _nVirtual;
-
-    auto jw = xacc::getService<ObservableTransform>("jw");
     std::vector<std::shared_ptr<Observable>> pool;
 
     // single excitations
@@ -63,17 +59,14 @@ public:
 
         // spin-adapted singles
         FermionOperator fermiOp;
-        fermiOp = FermionOperator({{aa, 1}, {ia, 0}}, inv_sqrt_2);
-        fermiOp -= FermionOperator({{ia, 1}, {aa, 0}}, inv_sqrt_2);
+        fermiOp = FermionOperator({{aa, 1}, {ia, 0}}, 0.5);
+        fermiOp -= FermionOperator({{ia, 1}, {aa, 0}}, 0.5);
 
-        fermiOp += FermionOperator({{ab, 1}, {ib, 0}}, inv_sqrt_2);
-        fermiOp -= FermionOperator({{ib, 1}, {ab, 0}}, inv_sqrt_2);
+        fermiOp += FermionOperator({{ab, 1}, {ib, 0}}, 0.5);
+        fermiOp -= FermionOperator({{ib, 1}, {ab, 0}}, 0.5);
 
-        auto pauliOp = jw->transform(std::shared_ptr<Observable>(&fermiOp, [](Observable *) {}));
-        if (std::dynamic_pointer_cast<PauliOperator>(pauliOp)->getTerms().size() != 0){
-          auto Op = std::dynamic_pointer_cast<Observable>(std::make_shared<FermionOperator>(fermiOp));
-          pool.push_back(Op);
-        }
+        pool.push_back(std::dynamic_pointer_cast<Observable>(std::make_shared<FermionOperator>(fermiOp)));
+
       }
     }
 
@@ -92,48 +85,40 @@ public:
             int bb = b + _nOccupied + _nOrbs;
 
             FermionOperator fermiOp;
-            fermiOp = FermionOperator({{aa, 1}, {ia, 0}, {ba, 1}, {ja, 0}}, two_inv_sqrt_12);
-            fermiOp -= FermionOperator({{ja, 1}, {ba, 0}, {ia, 1}, {aa, 0}}, two_inv_sqrt_12);
+            fermiOp = FermionOperator({{aa, 1}, {ia, 0}, {ba, 1}, {ja, 0}}, 2.0 / std::sqrt(24.0));
+            fermiOp -= FermionOperator({{ja, 1}, {ba, 0}, {ia, 1}, {aa, 0}}, 2.0 / std::sqrt(24.0));
 
-            fermiOp += FermionOperator({{ab, 1}, {ib, 0}, {bb, 1}, {jb, 0}}, two_inv_sqrt_12);
-            fermiOp -= FermionOperator({{jb, 1}, {bb, 0}, {ib, 1}, {ab, 0}}, two_inv_sqrt_12);
+            fermiOp += FermionOperator({{ab, 1}, {ib, 0}, {bb, 1}, {jb, 0}}, 2.0 / std::sqrt(24.0));
+            fermiOp -= FermionOperator({{jb, 1}, {bb, 0}, {ib, 1}, {ab, 0}}, 2.0 / std::sqrt(24.0));
 
-            fermiOp += FermionOperator({{aa, 1}, {ia, 0}, {bb, 1}, {jb, 0}}, one_inv_sqrt_12);
-            fermiOp -= FermionOperator({{jb, 1}, {bb, 0}, {ia, 1}, {aa, 0}}, one_inv_sqrt_12);
+            fermiOp += FermionOperator({{aa, 1}, {ia, 0}, {bb, 1}, {jb, 0}}, 1.0 / std::sqrt(24.0));
+            fermiOp -= FermionOperator({{jb, 1}, {bb, 0}, {ia, 1}, {aa, 0}}, 1.0 / std::sqrt(24.0));
 
-            fermiOp += FermionOperator({{ab, 1}, {ib, 0}, {ba, 1}, {ja, 0}}, one_inv_sqrt_12);
-            fermiOp -= FermionOperator({{ja, 1}, {ba, 0}, {ib, 1}, {ab, 0}}, one_inv_sqrt_12);
+            fermiOp += FermionOperator({{ab, 1}, {ib, 0}, {ba, 1}, {ja, 0}}, 1.0 / std::sqrt(24.0));
+            fermiOp -= FermionOperator({{ja, 1}, {ba, 0}, {ib, 1}, {ab, 0}}, 1.0 / std::sqrt(24.0));
 
-            fermiOp += FermionOperator({{aa, 1}, {ib, 0}, {bb, 1}, {ja, 0}}, one_inv_sqrt_12);
-            fermiOp -= FermionOperator({{ja, 1}, {bb, 0}, {ib, 1}, {aa, 0}}, one_inv_sqrt_12);
+            fermiOp += FermionOperator({{aa, 1}, {ib, 0}, {bb, 1}, {ja, 0}}, 1.0 / std::sqrt(24.0));
+            fermiOp -= FermionOperator({{ja, 1}, {bb, 0}, {ib, 1}, {aa, 0}}, 1.0 / std::sqrt(24.0));
 
-            fermiOp += FermionOperator({{ab, 1}, {ia, 0}, {ba, 1}, {jb, 0}}, one_inv_sqrt_12);
-            fermiOp -= FermionOperator({{jb, 1}, {ba, 0}, {ia, 1}, {ab, 0}}, one_inv_sqrt_12);
+            fermiOp += FermionOperator({{ab, 1}, {ia, 0}, {ba, 1}, {jb, 0}}, 1.0 / std::sqrt(24.0));
+            fermiOp -= FermionOperator({{jb, 1}, {ba, 0}, {ia, 1}, {ab, 0}}, 1.0 / std::sqrt(24.0));
 
-            auto pauliOp = jw->transform(std::shared_ptr<Observable>(&fermiOp, [](Observable *) {}));
-            if (std::dynamic_pointer_cast<PauliOperator>(pauliOp)->getTerms().size() != 0){
-              auto Op = std::dynamic_pointer_cast<Observable>(std::make_shared<FermionOperator>(fermiOp));
-              pool.push_back(Op);
-            }
+            pool.push_back(std::dynamic_pointer_cast<Observable>(std::make_shared<FermionOperator>(fermiOp)));
 
+            fermiOp = FermionOperator({{aa, 1}, {ia, 0}, {bb, 1}, {jb, 0}}, 1.0 / (2.0 * std::sqrt(2.0)));
+            fermiOp -= FermionOperator({{jb, 1}, {bb, 0}, {ia, 1}, {aa, 0}}, 1.0 / (2.0 * std::sqrt(2.0)));
 
-            fermiOp = FermionOperator({{aa, 1}, {ia, 0}, {bb, 1}, {jb, 0}}, 0.5);
-            fermiOp -= FermionOperator({{jb, 1}, {bb, 0}, {ia, 1}, {aa, 0}}, 0.5);
+            fermiOp += FermionOperator({{ab, 1}, {ib, 0}, {ba, 1}, {ja, 0}}, 1.0 / (2.0 * std::sqrt(2.0)));
+            fermiOp -= FermionOperator({{ja, 1}, {ba, 0}, {ib, 1}, {ab, 0}}, 1.0 / (2.0 * std::sqrt(2.0)));
 
-            fermiOp += FermionOperator({{ab, 1}, {ib, 0}, {ba, 1}, {ja, 0}}, 0.5);
-            fermiOp -= FermionOperator({{ja, 1}, {ba, 0}, {ib, 1}, {ab, 0}}, 0.5);
+            fermiOp += FermionOperator({{aa, 1}, {ib, 0}, {bb, 1}, {ja, 0}}, -1.0 / (2.0 * std::sqrt(2.0)));
+            fermiOp -= FermionOperator({{ja, 1}, {bb, 0}, {ib, 1}, {aa, 0}}, -1.0 / (2.0 * std::sqrt(2.0)));
 
-            fermiOp += FermionOperator({{aa, 1}, {ib, 0}, {bb, 1}, {ja, 0}}, -0.5);
-            fermiOp -= FermionOperator({{ja, 1}, {bb, 0}, {ib, 1}, {aa, 0}}, -0.5);
+            fermiOp += FermionOperator({{ab, 1}, {ia, 0}, {ba, 1}, {jb, 0}}, -1.0 / (2.0 * std::sqrt(2.0)));
+            fermiOp -= FermionOperator({{jb, 1}, {ba, 0}, {ia, 1}, {ab, 0}}, -1.0 / (2.0 * std::sqrt(2.0)));
 
-            fermiOp += FermionOperator({{ab, 1}, {ia, 0}, {ba, 1}, {jb, 0}}, -0.5);
-            fermiOp -= FermionOperator({{jb, 1}, {ba, 0}, {ia, 1}, {ab, 0}}, -0.5);
+            pool.push_back(std::dynamic_pointer_cast<Observable>(std::make_shared<FermionOperator>(fermiOp)));
 
-            pauliOp = jw->transform(std::shared_ptr<Observable>(&fermiOp, [](Observable *) {}));
-            if (std::dynamic_pointer_cast<PauliOperator>(pauliOp)->getTerms().size() != 0){
-              auto Op = std::dynamic_pointer_cast<Observable>(std::make_shared<FermionOperator>(fermiOp));
-              pool.push_back(Op);
-            }
           }
         }
       }
