@@ -123,7 +123,7 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
   std::vector<double> x; // these are the variational parameters
   double oldEnergy = 0.0;
-  for (int iter = 0; iter < 2; iter++){
+  for (int iter = 0; iter < _maxIter; iter++){
 
     std::cout << "Iteration: " << iter + 1 << std::endl;
     std::cout << "Computing [H, A]\n" << std::endl;
@@ -154,6 +154,7 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
     }
 
     gradientNorm = std::sqrt(gradientNorm);
+    std::cout << "Max gradient component: [H, " << maxCommutatorIdx << "] = " << maxCommutator << " a.u.\n";
     std::cout << "Norm of gradient vector: " << gradientNorm << " a.u.\n";
 
     if (gradientNorm < _threshold) {
