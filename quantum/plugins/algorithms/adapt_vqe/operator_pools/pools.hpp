@@ -34,7 +34,7 @@ public:
 
   // check if pool exists
   bool isValidOperatorPool(const std::string &operatorPool) override {
-    if(operatorPool == "UCCSD"){ // will add more pools in the future
+    if(operatorPool == "UCCSD"){ 
       return true;
     }
     return false;
@@ -128,6 +128,117 @@ public:
   }
 
   const std::string name() const override { return "uccsd"; }
+  const std::string description() const override { return ""; }
+};
+
+
+class QubitPool : public OperatorPool {
+
+public:
+
+  QubitPool() = default;
+
+  // check if pool exists
+  bool isValidOperatorPool(const std::string &operatorPool) override {
+    if(operatorPool == "qubit-pool"){ 
+      return true;
+    }
+    return false;
+  }
+
+  // generate the pool
+  std::vector<std::shared_ptr<Observable>>
+  generate(const int &nQubits, const int &nElectrons) override {
+
+    // The qubit pool vanishes for strings with an even number of Pauli Y's
+    // and can have at most 4 operators
+    // We loop over the indices for qubits q0-q3 and
+    // {X, Y, X} for each qubit and make sure that we have the appropriate 
+    // number of Y's and only add unique operators, i.e., those which 
+    // survive symmetry operations in the PauliOperator class.
+
+    std::vector<std::shared_ptr<Observable>> pool;
+    std::vector<PauliOperator> pauliOps;
+    std::vector<std::string> label;
+    std::vector<int> opIdx;
+    std::string opStr;
+    PauliOperator op;
+
+    for (int q0 = 0; q0 < nQubits; q0++){
+
+      for (auto op0 : {"X", "Y", "Z"}){
+
+        label.push_back(op0);
+        if (op0 == "Y"){
+          opStr = "Y" + std::to_string(q0);
+          op.fromString("(0,1)" + opStr);
+          pauliOps.push_back(op);
+        }
+        
+        for (int q1 = q0 + 1; q1 < nQubits; q1++){
+
+          for (auto op1 : {"X", "Y", "Z"}){
+
+            label.push_back(op1);
+            if (std::count(label.begin(), label.end(), "Y") == 1){
+              opStr = op0 + std::to_string(q0) + op1 + std::to_string(q1);
+              op.fromString("(0,1)" + opStr);
+              if(!(std::find(pauliOps.begin(), pauliOps.end(), op) != pauliOps.end())){
+                pauliOps.push_back(op);
+              }
+
+            }
+
+            for (int q2 = q1 + 1; q2 < nQubits; q2++){
+
+              for (auto op2 : {"X", "Y", "Z"}){
+
+                label.push_back(op2);
+                if (std::count(label.begin(), label.end(), "Y") == 1 || std::count(label.begin(), label.end(), "Y") == 3){
+
+                  opStr = op0 + std::to_string(q0) + op1 + std::to_string(q1) + op2 + std::to_string(q2);
+                  op.fromString("(0,1)" + opStr);
+                  if(!(std::find(pauliOps.begin(), pauliOps.end(), op) != pauliOps.end())){
+                    pauliOps.push_back(op);
+                  }
+                }
+
+                for (int q3 = q2 + 1; q3 < nQubits; q3++){
+
+                  for (auto op3 : {"X", "Y", "Z"}){
+
+                    label.push_back(op3);
+                    if (std::count(label.begin(), label.end(), "Y") == 1 || std::count(label.begin(), label.end(), "Y") == 3){
+
+                      opStr = op0 + std::to_string(q0) + op1 + std::to_string(q1) + op2 + std::to_string(q2) + op3 + std::to_string(q3);
+                      op.fromString("(0,1)" + opStr);
+                      if(!(std::find(pauliOps.begin(), pauliOps.end(), op) != pauliOps.end())){
+                        pauliOps.push_back(op);
+                      }
+
+                    } 
+
+                    label.pop_back();
+                  }
+                }
+                label.pop_back();
+              }
+            }
+            label.pop_back();
+          }
+        }
+        label.pop_back();
+      }
+    }
+
+    for (auto op: pauliOps){
+      pool.push_back(std::dynamic_pointer_cast<Observable>(std::make_shared<PauliOperator>(op)));
+    }
+    
+    return pool;
+  }
+
+  const std::string name() const override { return "qubit-pool"; }
   const std::string description() const override { return ""; }
 };
 

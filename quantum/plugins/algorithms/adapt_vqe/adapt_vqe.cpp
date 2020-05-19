@@ -24,8 +24,6 @@
 
 #include <memory>
 #include <iomanip>
-#include <cmath>
-#include <typeinfo>
 
 using namespace xacc;
 using namespace xacc::quantum;
@@ -51,12 +49,16 @@ bool ADAPT_VQE::initialize(const HeterogeneousMap &parameters) {
   accelerator = parameters.get<std::shared_ptr<Accelerator>>("accelerator");
   nElectrons = parameters.get<int>("nElectrons");
 
-  if (parameters.stringExists("maxiter")) {
+  if (parameters.keyExists<int>("maxiter")) {
     _maxIter = parameters.get<int>("maxiter");
   } 
   
-  if (parameters.stringExists("threshold")) {
+  if (parameters.keyExists<double>("threshold")) {
     _threshold = parameters.get<double>("threshold");
+  }
+
+  if (parameters.keyExists<double>("print_threshold")) {
+    _printThreshold = parameters.get<double>("print_threshold");
   }
 
   pool = parameters.getString("pool");
@@ -97,8 +99,9 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   auto ansatzInstructions = ansatzRegistry->createComposite("ansatzCircuit");
   auto operatorPool = xacc::getService<OperatorPool>(pool);
   auto operators = operatorPool->generate(buffer->size(), nElectrons);
+  std::vector<std::shared_ptr<Observable>> pauliOps, ansatzOperators;
   auto jw = xacc::getService<ObservableTransform>("jw");
-  std::vector<std::shared_ptr<Observable>> pauliOps;
+  
 
   // Mean-field state
   std::size_t j;
@@ -114,7 +117,12 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   // Vector of non-vanishing commutators, need to compute them only once
   std::vector<std::shared_ptr<Observable>> commutators;
   for (auto op : operators){
-    auto pauliOp = jw->transform(op);
+    std::shared_ptr<Observable> pauliOp;
+    if(std::dynamic_pointer_cast<PauliOperator>(op)){
+      pauliOp = op;
+    } else {
+      pauliOp = jw->transform(op);
+    }
     if (std::dynamic_pointer_cast<PauliOperator>(pauliOp)->getTerms().size() != 0){
       pauliOps.push_back(pauliOp);
       commutators.push_back(observable->commutator(pauliOp));
@@ -123,10 +131,15 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
   std::vector<double> x; // these are the variational parameters
   double oldEnergy = 0.0;
+
+  std::cout << "Operator pool: " << operatorPool->name() << "\n";
+  std::cout << "Number of operators in the pool: " << operators.size() << "\n\n";
+
   for (int iter = 0; iter < _maxIter; iter++){
 
-    std::cout << "Iteration: " << iter + 1 << std::endl;
-    std::cout << "Computing [H, A]\n" << std::endl;
+    std::cout << "Iteration: " << iter + 1 << "\n";
+    std::cout << "Computing [H, A]\n" << "\n";
+    std::cout << "Printing commutators with absolute value above " << _printThreshold << "\n";
 
     int maxCommutatorIdx = 0;
     double maxCommutator = 0.0;
@@ -143,7 +156,10 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
                   std::make_pair("ansatz", ansatzInstructions)});
       auto tmp_buffer = xacc::qalloc(buffer->size());
       auto commutatorValue = grad_vqe->execute(tmp_buffer, x)[0];
-      std::cout << std::setprecision(12) << "[H," << operatorIdx << "] = " << commutatorValue << "\n";
+
+      if(abs(commutatorValue) > _printThreshold){
+        std::cout << std::setprecision(12) << "[H," << operatorIdx << "] = " << commutatorValue << "\n";
+      }
 
       if(abs(commutatorValue) > maxCommutator){
         maxCommutatorIdx = operatorIdx;
@@ -168,6 +184,8 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       return; 
 
     } else if (iter < _maxIter) {
+
+      ansatzOperators.push_back(pauliOps[maxCommutatorIdx]);
 
       // Instruction service for the operator to be added to the ansatz
       auto maxCommutatorGate = std::dynamic_pointer_cast<quantum::Circuit>(

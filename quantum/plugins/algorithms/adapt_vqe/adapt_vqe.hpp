@@ -16,7 +16,6 @@
 #include "Algorithm.hpp"
 #include "Observable.hpp"
 #include "PauliOperator.hpp"
-#include <vector>
 
 using namespace xacc::quantum;
 
@@ -33,6 +32,23 @@ public:
 
 };
 
+
+class GradientStrategy : public Identifiable {
+
+  protected:
+    //virtual std::vector<double> gradientElements(const std::vector<double> &x) = 0;
+  virtual std::vector<std::shared_ptr<CompositeInstruction>>
+  getCircuitExecutions(std::vector<std::shared_ptr<CompositeInstruction>> ansatzInstructions,
+                      const std::vector<std::shared_ptr<Observable>> ansatzOperators,
+                      const std::vector<double> &x) = 0;
+
+  virtual void compute(std::vector<double> &grad, std::vector<std::shared_ptr<AcceleratorBuffer>> results) = 0;
+
+  const std::string name() const override { return "adapt-vqe-gradient"; }
+  const std::string description() const override { return ""; }
+
+};
+
 class ADAPT_VQE : public Algorithm {
 protected:
   std::shared_ptr<Observable> observable;
@@ -42,9 +58,14 @@ protected:
   std::string pool;
   int _maxIter = 50;
   double _threshold = 1.0e-2;
-  // std::string gradient; will eventually come back here
+  double _printThreshold = 1.0e-10;
+  std::vector<std::shared_ptr<Observable>> ansatzOperators;
 
   HeterogeneousMap _parameters;
+
+  //std::vector<std::shared_ptr<Observable>> 
+  //gradientVector(const std::vector<double> &x, 
+              //  const std::vector<std::shared_ptr<Observable>> ops);
 
 public:
 
