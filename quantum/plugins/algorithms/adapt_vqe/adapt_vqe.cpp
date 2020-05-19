@@ -173,7 +173,7 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
     std::cout << "Max gradient component: [H, " << maxCommutatorIdx << "] = " << maxCommutator << " a.u.\n";
     std::cout << "Norm of gradient vector: " << gradientNorm << " a.u.\n";
 
-    if (gradientNorm < _threshold) {
+    if (gradientNorm < _gradThreshold) {
       std::cout << "\nADAPT-VQE converged in " << iter << " iterations.\n";
       std::cout << "ADAPT-VQE energy: " << oldEnergy << " a.u.\n";
       std::cout << "Optimal parameters: \n";

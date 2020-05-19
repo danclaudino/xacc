@@ -160,7 +160,6 @@ public:
     std::vector<std::shared_ptr<Observable>> pool;
     std::vector<PauliOperator> pauliOps;
     std::vector<std::string> label;
-    std::vector<int> opIdx;
     std::string opStr;
     PauliOperator op;
 
