@@ -54,7 +54,7 @@ bool ADAPT_VQE::initialize(const HeterogeneousMap &parameters) {
   } 
   
   if (parameters.keyExists<double>("threshold")) {
-    _threshold = parameters.get<double>("threshold");
+    _gradThreshold = parameters.get<double>("threshold");
   }
 
   if (parameters.keyExists<double>("print_threshold")) {
