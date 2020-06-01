@@ -79,3 +79,5 @@ message(
     STATUS "${BoldGreen}Building QCS Accelerator.${ColorReset}")
  #add_subdirectory(qcs)
 endif()
+
+add_subdirectory(quilc)

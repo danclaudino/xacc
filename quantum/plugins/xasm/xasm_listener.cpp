@@ -32,6 +32,10 @@ void XASMListener::for_stmt_update_inst_args(Instruction *inst) {
 
       if (!arg) {
         auto param_str = parameters[i].toString();
+        param_str.erase(
+            std::remove_if(param_str.begin(), param_str.end(),
+                           [](char c) { return c == ']' || c == '['; }),
+            param_str.end());
         param_str.erase(std::remove_if(param_str.begin(), param_str.end(),
                                        [](char c) { return !std::isalpha(c); }),
                         param_str.end());
@@ -42,8 +46,21 @@ void XASMListener::for_stmt_update_inst_args(Instruction *inst) {
           // this was a container-like type
           // give the instruction a mapping from i to vector idx
 
-          inst->addIndexMapping(
-              i, new_var_to_vector_idx[parameters[i].toString()]);
+          auto tmp_str = parameters[i].toString();
+          tmp_str.erase(
+              std::remove_if(tmp_str.begin(), tmp_str.end(),
+                             [](char c) { return c == '[' || c == ']'; }),
+              tmp_str.end());
+          tmp_str.erase(tmp_str.find(arg->name), arg->name.length());
+          int vector_mapping = 0;
+          try {
+            auto vector_idx = std::stoi(tmp_str);
+            vector_mapping = vector_idx;
+          } catch (std::exception &e) {
+            std::cout << e.what() << "\n";
+            xacc::error("[xasm] could not compute vector index.");
+          }
+          inst->addIndexMapping(i, vector_mapping);
         }
       }
 
@@ -95,7 +112,7 @@ void XASMListener::createForInstructions<XasmLessThan>(
           irProvider->createInstruction(next->name(), new_bits, new_params);
 
       copy->setBufferNames(next->getBufferNames());
-      
+
       for_stmt_update_inst_args(copy.get());
 
       instructions.push_back(copy);
@@ -459,13 +476,15 @@ void XASMListener::enterParamList(xasmParser::ParamListContext *ctx) {
         currentParameters.emplace_back(value);
       } else {
         xacc::debug("[XasmCompiler] Parameter added is " + param->getText());
-        currentParameters.emplace_back(param->getText());
+        InstructionParameter p(param->getText());
+        p.storeOriginalExpression();
+        currentParameters.push_back(p);
       }
     }
   }
 }
 
-void XASMListener::exitInstruction(xasmParser::InstructionContext *ctx) {
+void XASMListener::exitInstruction(xasmParser::InstructionContext *ctx) { 
   auto inst = irProvider->createInstruction(currentInstructionName, currentBits,
                                             currentParameters);
 
@@ -570,9 +589,9 @@ void XASMListener::enterOptionsType(xasmParser::OptionsTypeContext *ctx) {
       if (currentOptions.stringExists(key)) {
         bool isConstChar = currentOptions.keyExists<const char *>(key);
         if (isConstChar) {
-          currentOptions.get_mutable<const char *>(key) = valStr.c_str();
+          currentOptions.insert(key, valStr.c_str());
         } else {
-          currentOptions.get_mutable<std::string>(key) = valStr;
+          currentOptions.insert(key,valStr);
         }
 
       } else {
@@ -602,6 +621,7 @@ void XASMListener::exitComposite_generator(
       for (std::size_t i = 0; i < size; i++) {
         auto inst = irProvider->createInstruction(currentCompositeName,
                                                   std::vector<std::size_t>{i});
+        inst->setBufferNames({buffer->name()});
         function->addInstruction(inst);
       }
 
@@ -648,6 +668,7 @@ void XASMListener::exitComposite_generator(
                 currentCompositeName);
   }
 
+  composite->setBufferNames({ctx->buffer_name->getText()});
   function->addInstruction(composite);
 
   currentCompositeName = "";

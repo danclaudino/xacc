@@ -26,19 +26,18 @@ bool VQE::initialize(const HeterogeneousMap &parameters) {
   if (!parameters.pointerLikeExists<Observable>("observable")) {
     std::cout << "Obs was false\n";
     return false;
-  } else if (!parameters.pointerLikeExists<CompositeInstruction>(
-                 "ansatz")) {
+  } else if (!parameters.pointerLikeExists<CompositeInstruction>("ansatz")) {
     std::cout << "Ansatz was false\n";
     return false;
-  } else if (!parameters.pointerLikeExists<Accelerator>(
-                 "accelerator")) {
+  } else if (!parameters.pointerLikeExists<Accelerator>("accelerator")) {
     std::cout << "Acc was false\n";
     return false;
   }
 
-
   observable = parameters.getPointerLike<Observable>("observable");
-  optimizer = parameters.getPointerLike<Optimizer>("optimizer");
+  if (parameters.pointerLikeExists<Optimizer>("optimizer")) {
+    optimizer = parameters.getPointerLike<Optimizer>("optimizer");
+  }
   accelerator = parameters.getPointerLike<Accelerator>("accelerator");
   kernel = parameters.getPointerLike<CompositeInstruction>("ansatz");
 
@@ -58,6 +57,11 @@ const std::vector<std::string> VQE::requiredParameters() const {
 }
 
 void VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
+
+  if (!optimizer) {
+    xacc::error("VQE Algorithm Error - Optimizer was null. Please provide a "
+                "valid Optimizer.");
+  }
 
   auto kernels = observable->observe(xacc::as_shared_ptr(kernel));
 
@@ -85,8 +89,12 @@ void VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
           }
 
           if (nFunctionInstructions > kernel->nInstructions()) {
-            auto evaled = f->operator()(x);
-            fsToExec.push_back(evaled);
+            if (x.empty()) {
+              fsToExec.push_back(f);
+            } else {
+              auto evaled = f->operator()(x);
+              fsToExec.push_back(evaled);
+            }
             coefficients.push_back(std::real(coeff));
           } else {
             identityCoeff += std::real(coeff);
@@ -119,7 +127,7 @@ void VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
         idBuffer->addExtraInfo("parameters", x);
         idBuffer->addExtraInfo("exp-val-z", 1.0);
         if (accelerator->name() == "ro-error")
-            idBuffer->addExtraInfo("ro-fixed-exp-val-z", 1.0);
+          idBuffer->addExtraInfo("ro-fixed-exp-val-z", 1.0);
         buffer->appendChild("I", idBuffer);
 
         if (buffers[0]->hasExtraInfoKey(
@@ -161,7 +169,7 @@ void VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
         }
 
         std::stringstream ss;
-        ss << "E(" << ( !x.empty() ? std::to_string(x[0]) : "");
+        ss << "E(" << (!x.empty() ? std::to_string(x[0]) : "");
         for (int i = 1; i < x.size(); i++)
           ss << "," << x[i];
         ss << ") = " << std::setprecision(12) << energy;
@@ -181,7 +189,6 @@ std::vector<double>
 VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer,
              const std::vector<double> &x) {
 
-std::cout << "exec " << kernel->nInstructions() <<"\n";
   auto kernels = observable->observe(xacc::as_shared_ptr(kernel));
   std::vector<double> coefficients;
   std::vector<std::string> kernelNames;
@@ -200,8 +207,12 @@ std::cout << "exec " << kernel->nInstructions() <<"\n";
     }
 
     if (nFunctionInstructions > kernel->nInstructions()) {
-      auto evaled = f->operator()(x);
-      fsToExec.push_back(evaled);
+      if (x.empty()) {
+        fsToExec.push_back(f);
+      } else {
+        auto evaled = f->operator()(x);
+        fsToExec.push_back(evaled);
+      }
       coefficients.push_back(std::real(coeff));
     } else {
       identityCoeff += std::real(coeff);
@@ -244,7 +255,7 @@ std::cout << "exec " << kernel->nInstructions() <<"\n";
 
   std::stringstream ss;
 
-  ss << "E(" << ( !x.empty() ? std::to_string(x[0]) : "");
+  ss << "E(" << (!x.empty() ? std::to_string(x[0]) : "");
   for (int i = 1; i < x.size(); i++)
     ss << "," << x[i];
   ss << ") = " << std::setprecision(12) << energy;

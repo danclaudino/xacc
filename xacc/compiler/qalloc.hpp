@@ -19,6 +19,7 @@ namespace xacc {
 class AcceleratorBuffer;
 class Observable;
 namespace internal_compiler {
+using qubit = std::pair<std::string, std::size_t>;
 
 class qreg {
 protected:
@@ -28,11 +29,13 @@ public:
   qreg() = default;
   qreg(const int n);
   qreg (const qreg& other);
-  int operator[](const int &i);
+  qubit operator[](const std::size_t &i);
   AcceleratorBuffer *results();
   std::map<std::string, int> counts();
   double exp_val_z();
   void reset();
+  int size();
+  void addChild(qreg& q);
   void setName(const char *name);
   void setNameAndStore(const char *name);
   void store();
@@ -47,6 +50,8 @@ xacc::internal_compiler::qreg qalloc(const int n) {
   return xacc::internal_compiler::qreg(n);
 }
 
-#define __qpu__ [[clang::syntax(qcor)]]
+// __qpu__ indicates this functions is for the QCOR Clang Syntax Handler
+// and annotated with quantum for the LLVM IR CodeGen
+#define __qpu__ [[clang::syntax(qcor)]] __attribute__((annotate("quantum")))
 
 #endif
