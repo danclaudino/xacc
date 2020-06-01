@@ -12,7 +12,7 @@
  *******************************************************************************/
 #include "adapt_vqe.hpp"
 #include "operator_pools/pools.hpp"
-#include "strategies/analytic.hpp"
+#include "strategies/adapt_vqe_gradient.hpp"
 
 #include "cppmicroservices/BundleActivator.h"
 #include "cppmicroservices/BundleContext.h"
@@ -39,8 +39,8 @@ public:
     auto qpool = std::make_shared<xacc::algorithm::QubitPool>();
     context.RegisterService<xacc::algorithm::OperatorPool>(qpool);
 
-    //auto grad = std::make_shared<xacc::algorithm::ADAPT_VQE_Gradient>();
-    //context.RegisterService<xacc::AlgorithmGradientStrategy>(grad);
+    auto grad = std::make_shared<xacc::algorithm::ADAPT_VQE_Gradient>();
+    context.RegisterService<xacc::AlgorithmGradientStrategy>(grad);
 
   }
         

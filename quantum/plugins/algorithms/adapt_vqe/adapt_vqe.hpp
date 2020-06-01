@@ -46,10 +46,6 @@ protected:
 
   HeterogeneousMap _parameters;
 
-  //std::vector<std::shared_ptr<Observable>> 
-  //gradientVector(const std::vector<double> &x, 
-              //  const std::vector<std::shared_ptr<Observable>> ops);
-
 public:
 
   bool initialize(const HeterogeneousMap &parameters) override;

@@ -42,6 +42,14 @@ bool VQE::initialize(const HeterogeneousMap &parameters) {
   accelerator = parameters.getPointerLike<Accelerator>("accelerator");
   kernel = parameters.getPointerLike<CompositeInstruction>("ansatz");
 
+
+  // if gradient is provided
+  if (parameters.pointerLikeExists<AlgorithmGradientStrategy>(
+      "gradient_strategy")){
+    gradientStrategy = parameters.getPointerLike<AlgorithmGradientStrategy>(
+      "gradient_strategy");
+  }
+
   return true;
 }
 
@@ -61,7 +69,9 @@ void VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
         std::vector<std::string> kernelNames;
         std::vector<std::shared_ptr<CompositeInstruction>> fsToExec;
 
+        // This loops over instructions to compute the energy
         double identityCoeff = 0.0;
+        int nInstructionsEnergy, nInstructionsGradient;
         for (auto &f : kernels) {
           kernelNames.push_back(f->name());
           std::complex<double> coeff = f->getCoefficient();
@@ -80,6 +90,20 @@ void VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
             coefficients.push_back(std::real(coeff));
           } else {
             identityCoeff += std::real(coeff);
+          }
+        }
+
+        // Retrieve instructions for gradient, if a pointer of type 
+        // AlgorithmGradientStrategy is given
+        if (gradientStrategy){
+          
+          auto gradFsToExec = gradientStrategy->getGradientExecutions(xacc::as_shared_ptr(kernel), x);
+          // Loop over the gradient instructions and add them to the instructions
+          // to be sent to the qpu
+          nInstructionsEnergy = fsToExec.size();
+          nInstructionsGradient = gradFsToExec.size();
+          for (auto inst: gradFsToExec){
+            fsToExec.push_back(inst);
           }
         }
 
@@ -105,7 +129,26 @@ void VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
             b->addExtraInfo("parameters", initial_params);
             buffer->appendChild(b->name(), b);
           }
-        } else {
+
+        } else if (gradientStrategy){
+
+          for (int i = 0; i < nInstructionsEnergy; i++) {
+            auto expval = buffers[i]->getExpectationValueZ();
+            energy += expval * coefficients[i];
+            //std::cout << "exp " << expval << "coeff " << coefficients[i] <<"\n";
+            buffers[i]->addExtraInfo("coefficient", coefficients[i]);
+            buffers[i]->addExtraInfo("kernel", fsToExec[i]->name());
+            buffers[i]->addExtraInfo("exp-val-z", expval);
+            buffers[i]->addExtraInfo("parameters", x);
+            buffer->appendChild(fsToExec[i]->name(), buffers[i]);
+          }
+
+          std::cout << "Energy " << energy << "\n";
+
+          gradientStrategy->compute(dx, 
+            std::vector<std::shared_ptr<AcceleratorBuffer>>(buffers.begin() + nInstructionsEnergy, buffers.end()));
+        
+        } else {// normal VQE run w/o RDM purification and no gradients
           for (int i = 0; i < buffers.size(); i++) {
             auto expval = buffers[i]->getExpectationValueZ();
             energy += expval * coefficients[i];
@@ -137,6 +180,8 @@ void VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 std::vector<double>
 VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer,
              const std::vector<double> &x) {
+
+std::cout << "exec " << kernel->nInstructions() <<"\n";
   auto kernels = observable->observe(xacc::as_shared_ptr(kernel));
   std::vector<double> coefficients;
   std::vector<std::string> kernelNames;
@@ -188,6 +233,7 @@ VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer,
     for (int i = 0; i < buffers.size(); i++) {
       auto expval = buffers[i]->getExpectationValueZ();
       energy += expval * coefficients[i];
+      //std::cout << "from vqe exp " << expval << "coeff " << coefficients[i] <<"\n";
       buffers[i]->addExtraInfo("coefficient", coefficients[i]);
       buffers[i]->addExtraInfo("kernel", fsToExec[i]->name());
       buffers[i]->addExtraInfo("exp-val-z", expval);

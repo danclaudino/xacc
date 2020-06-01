@@ -2,8 +2,9 @@ import xacc
 
 # Get access to the desired QPU and
 # allocate some qubits to run on
-qpu = xacc.getAccelerator('tnqvm', {'vqe-mode': True})
-optimizer = xacc.getOptimizer('nlopt')
+qpu = xacc.getAccelerator('tnqvm')
+#optimizer = xacc.getOptimizer('nlopt')
+optimizer = xacc.getOptimizer('nlopt',{'nlopt-optimizer':'l-bfgs'})
 buffer = xacc.qalloc(4)
 
 geom = '''

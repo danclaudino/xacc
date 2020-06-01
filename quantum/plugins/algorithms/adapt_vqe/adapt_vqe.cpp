@@ -21,6 +21,7 @@
 #include "xacc_service.hpp"
 #include "xacc_observable.hpp"
 #include "Circuit.hpp"
+#include "AlgorithmGradientStrategy.hpp"
 
 #include <memory>
 #include <iomanip>
@@ -203,12 +204,19 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
         ansatzInstructions->addInstruction(inst);
       }
 
+      // Instantiate gradient class
+      auto gradientStrategy = xacc::getService<AlgorithmGradientStrategy>("adapt-vqe-gradient");
+      gradientStrategy->optionalParameters({std::make_pair("observable", observable),
+                                            std::make_pair("operators", ansatzOperators)});
+
       // Call VQE optimization 
       auto sub_vqe = xacc::getAlgorithm(
           "vqe", {std::make_pair("observable", observable),
                   std::make_pair("optimizer", optimizer),
                   std::make_pair("accelerator", accelerator),
-                  std::make_pair("ansatz", ansatzInstructions)});
+                  std::make_pair("gradient_strategy", gradientStrategy),
+                  std::make_pair("ansatz", ansatzInstructions)
+                  });
       sub_vqe->execute(buffer);
 
       auto newEnergy = (*buffer)["opt-val"].as<double>();
