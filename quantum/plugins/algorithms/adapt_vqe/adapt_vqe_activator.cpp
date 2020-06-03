@@ -42,6 +42,9 @@ public:
     auto grad = std::make_shared<xacc::algorithm::ADAPT_VQE_Gradient>();
     context.RegisterService<xacc::AlgorithmGradientStrategy>(grad);
 
+    auto l = std::make_shared<xacc::algorithm::CircuitLearningGradient>();
+    context.RegisterService<xacc::AlgorithmGradientStrategy>(l);
+
   }
         
   void Stop(BundleContext /*context*/) {}

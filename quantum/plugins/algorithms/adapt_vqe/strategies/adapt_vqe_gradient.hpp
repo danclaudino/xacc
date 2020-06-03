@@ -17,7 +17,10 @@
 #include "xacc.hpp"
 #include "xacc_service.hpp"
 #include "AlgorithmGradientStrategy.hpp"
+#include "Circuit.hpp"
+#include <cmath>
 #include <string>
+#include <boost/math/special_functions/factorials.hpp>
 
 using namespace xacc;
 using namespace xacc::quantum;
@@ -33,9 +36,11 @@ protected:
   std::shared_ptr<Observable> H; // Hamiltonian observable
   std::vector<int> nInstructionsElement; // # of instructions for each element in gradient vector
   std::vector<double> coefficients; // coefficient that multiplies Pauli term
+  int iter, order;
 
 public:
 
+  // passes the Hamiltonian and current ansatz operators to the gradient class
   bool optionalParameters(const HeterogeneousMap parameters) override {
 
     if (!parameters.keyExists<std::shared_ptr<Observable>>("observable")){
@@ -48,34 +53,56 @@ public:
       return false;
     }
 
+    if (parameters.keyExists<int>("expansion-order")){
+      order = parameters.get<int>("expansion-order");
+    }  else {
+      order = 2;
+    }
+
     H = parameters.get<std::shared_ptr<Observable>>("observable");
     ops = parameters.get<std::vector<std::shared_ptr<Observable>>>("operators");
+
+    iter = 0;
 
     return true;
     
   }
 
+  // provides instructions to the qpu for gradient computation 
   std::vector<std::shared_ptr<CompositeInstruction>>
   getGradientExecutions(std::shared_ptr<CompositeInstruction> circuit, const std::vector<double> &x) override {
 
+    std::cout << "Gradient computation iteration # " << iter + 1 << "\n";
+
     // lambda to implement the commutator expansion up to 2nd order
-    //std::complex<double> i(0, 1.0);
     auto commutator2ndOrder = [&](const std::vector<double> x, const int idx) {
 
+      auto C = std::dynamic_pointer_cast<PauliOperator>(ops[idx]);
+
       
-      auto Ti = std::dynamic_pointer_cast<PauliOperator>(ops[idx]);
       for (int k = idx + 1; k < x.size(); k++){
+        /*
         auto comm1stOrder = std::dynamic_pointer_cast<PauliOperator>(ops[k]->commutator(Ti));
         //std::cout << comm1stOrder->toString() <<"\n";
-        comm1stOrder->operator*=(-0.5 * x[k]);
+        //comm1stOrder->operator*=(-0.5 * x[k]);
+        comm1stOrder->operator*=(x[k]);
         Ti->operator+=(*comm1stOrder);
         
-        auto comm2stOrder = std::dynamic_pointer_cast<PauliOperator>(ops[k]->commutator(comm1stOrder));
-        comm2stOrder->operator*=(x[k] * x[k] / 8.0);
-        Ti->operator+=(*comm2stOrder);
+        //auto comm2stOrder = std::dynamic_pointer_cast<PauliOperator>(ops[k]->commutator(comm1stOrder));
+        //comm2stOrder->operator*=(x[k] * x[k] / 8.0);
+        //Ti->operator+=(*comm2stOrder);
+        */
 
+        for (int n = 0; n < order; n++){
+
+          auto comm = std::dynamic_pointer_cast<PauliOperator>(ops[n]->commutator(C));
+          comm->operator*=(std::pow(x[k], n + 1) / boost::math::factorial<double>((double) n+1));
+          C->operator+=(*comm);
+
+        
+        }
       }
-      return Ti;                                  
+      return C;                                  
     };
 
     // the derivative of latest added operator is simply [H, A]
@@ -84,24 +111,24 @@ public:
     
     // for the remaining operators
     // [H, e^N e^(N-1)...e^(k+1) Tk e^-(k+1)...e^-(N-1) e^(-N)]
-    // TODO fix this
     for (int i = 0; i < ops.size() - 1; i++){
-
       auto nestedCommutators = std::dynamic_pointer_cast<Observable>(commutator2ndOrder(x, i));
       auto grad = H->commutator(nestedCommutators);
       gradientVector.insert(gradientVector.begin(), std::dynamic_pointer_cast<Observable>(grad));
-
     }
 
     // Now loop over the gradient operators, observe them and store the instructions
     std::vector<std::shared_ptr<CompositeInstruction>> gradientInstructions;
+    std::cout << "Current parameters: \n"; 
+    for(auto param : x){
+      std::cout << param <<" ";
+    }
+    std::cout << "\n";
 
-    for(auto g : x){std::cout << "x " << g <<"\n";}
     std::vector<int> tmp(ops.size());
     for (int i = 0; i < gradientVector.size(); i++){
 
       auto kernels = gradientVector[i]->observe(circuit);
-
       double identityCoeff = 0.0;
       for (auto &f : kernels) {
         std::complex<double> coeff = f->getCoefficient();
@@ -121,16 +148,179 @@ public:
         } else {
           identityCoeff += std::real(coeff);
         }
-
       }
 
       tmp[i] = gradientInstructions.size();
-
     }
 
     nInstructionsElement = tmp;
     return gradientInstructions;
+  }
 
+  // computes the gradient vector from the current executed buffers and parameters
+  void compute(std::vector<double> &dx, std::vector<std::shared_ptr<AcceleratorBuffer>> results) override {
+
+    for (int gradTerm = 0; gradTerm < dx.size(); gradTerm++){ // loops over the number of entries in the gradient vector
+
+      double gradElement = 0.0;
+      for (int instElement = (gradTerm == 0) ? 0 : nInstructionsElement[gradTerm - 1];
+          instElement < nInstructionsElement[gradTerm];
+          instElement++) { //compute value of derivative for gradTerm entry
+        auto expval = results[instElement]->getExpectationValueZ();
+        gradElement += std::real(expval * coefficients[instElement]);
+      }
+      dx[gradTerm] = std::real(-gradElement / 2.0);
+    }
+    coefficients.clear();
+
+    std::cout << "Current gradient: \n"; 
+    for(auto param : dx){
+      std::cout << param <<" ";
+    }
+    std::cout << "\n\n";
+
+    std::reverse(dx.begin(), dx.end());
+    iter++;
+    return;
+  }
+
+  const std::string name() const override { return "adapt-vqe-gradient"; }
+  const std::string description() const override { return ""; }
+
+};
+
+class CircuitLearningGradient : public AlgorithmGradientStrategy {
+
+protected:
+
+  std::vector<std::shared_ptr<Observable>> ops; // operator in the current ansatz
+  std::shared_ptr<Observable> H; // Hamiltonian observable
+  std::vector<int> nInstructionsElement; // # of instructions for each element in gradient vector
+  std::vector<double> coefficients; // coefficient that multiplies Pauli term
+  int iter;
+  std::vector<int> ansatzInstIdx; // # of instructions for each element in gradient vector
+
+public:
+
+  // passes the Hamiltonian and current ansatz operators to the gradient class
+  bool optionalParameters(const HeterogeneousMap parameters) override {
+
+    if (!parameters.keyExists<std::shared_ptr<Observable>>("observable")){
+      std::cout << "ADAPT-VQE gradient computation requires observable.\n"; 
+      return false;
+    }
+
+    if (!parameters.keyExists<std::vector<std::shared_ptr<Observable>>>("operators")){
+      std::cout << "ADAPT-VQE gradient computation requires excitation operators.\n"; 
+      return false;
+    }
+
+    if (!parameters.keyExists<std::vector<int>>("instruction-index")){
+      std::cout << "ADAPT-VQE gradient computation requires excitation operators.\n"; 
+      return false;
+    }
+
+    H = parameters.get<std::shared_ptr<Observable>>("observable");
+    ops = parameters.get<std::vector<std::shared_ptr<Observable>>>("operators");
+    ansatzInstIdx = parameters.get<std::vector<int>>("instruction-index");
+
+    iter = 0;
+
+    return true;
+    
+  }
+
+    // provides instructions to the qpu for gradient computation 
+  std::vector<std::shared_ptr<CompositeInstruction>>
+  getGradientExecutions(std::shared_ptr<CompositeInstruction> circuit, const std::vector<double> &x) override {
+
+    std::vector<std::shared_ptr<CompositeInstruction>> gradientInstructions;
+    auto half_pi = xacc::constants::pi / 2.0;
+    std::vector<int> tmp(ops.size());
+    std::vector<double> params;
+
+    std::cout << "Current parameters: \n"; 
+    for(auto param : x){
+      std::cout << param <<" ";
+    }
+    std::cout << "\n";
+
+
+
+
+
+
+
+    
+
+    for (int l = 0; l < ops.size(); l++){ // loops over the unitaries in the ansatz
+
+      auto tmpCircuit = circuit;
+    
+      for (int i = 0; i < ansatzInstIdx[0]; i++){
+          tmpCircuit->addInstruction(getInstruction(i));
+      }
+
+      auto exp = std::dynamic_pointer_cast<quantum::Circuit>(
+      xacc::getService<Instruction>("exp_i_theta"));
+
+      exp->expand({std::make_pair("pauli", ops[l]->toString()),
+      std::make_pair("param_id", std::string("t")),
+          std::make_pair("no-i", false)});
+      exp->addVariable(std::string("t"));
+
+      params = x;
+      for(auto sign : {1.0, -1.0}){ // compute circuit for + or -
+
+        params.insert(l+1, sign * half_pi);
+
+        int counter = 1;
+        for (auto& inst : exp->getInstructions()){// insert the exp instructions
+          if(l == ops.size() - 1){
+            tmpCircuit->addInstruction(inst);
+          } else {
+            tmpCircuit->insertInstruction(ansatzInstIdx[l+1] + counter, inst);
+            counter++;
+          }
+          
+        }
+        
+      
+        // observe the Hamiltonian in the tmpCircuit and gather instructions
+        auto kernels = H->observe(tmpCircuit);
+        double identityCoeff = 0.0;
+        for (auto &f : kernels) {
+          std::complex<double> coeff = f->getCoefficient();
+
+          int nFunctionInstructions = 0;
+          if (f->getInstruction(0)->isComposite()) {
+            nFunctionInstructions =
+                circuit->nInstructions() + f->nInstructions() - 1;
+          } else {
+            nFunctionInstructions = f->nInstructions();
+          }
+
+          if (nFunctionInstructions > circuit->nInstructions()) {
+            auto evaled = f->operator()({x[0], sign * half_pi});
+            gradientInstructions.push_back(evaled);
+            coefficients.push_back(std::real(coeff));
+          } else {
+            identityCoeff += std::real(coeff);
+          }
+        }
+        
+      }
+
+      tmp[l] = gradientInstructions.size() / 2;
+    }
+    
+    nInstructionsElement = tmp;
+
+    /*for (auto &k : gradientInstructions){
+      std::cout << k->nInstructions() <<"\n";
+    }*/
+    std::cout << gradientInstructions.size() << "\n";
+    return gradientInstructions;
   }
 
   void compute(std::vector<double> &dx, std::vector<std::shared_ptr<AcceleratorBuffer>> results) override {
@@ -141,23 +331,30 @@ public:
       for (int instElement = (gradTerm == 0) ? 0 : nInstructionsElement[gradTerm - 1];
           instElement < nInstructionsElement[gradTerm];
           instElement++) { //compute value of derivative for gradTerm entry
-        auto expval = results[instElement]->getExpectationValueZ();
-        gradElement += expval * coefficients[instElement];
-        //if(gradTerm == 1){
-        //std::cout << instElement << " exp " << expval << "coeff " << coefficients[instElement] <<"\n";
-        //}
+
+        auto plus_expval = results[instElement]->getExpectationValueZ();
+        auto minus_expval = results[instElement + nInstructionsElement[gradTerm]]->getExpectationValueZ();
+        gradElement += std::real(plus_expval * coefficients[instElement]);
+        gradElement -= std::real(minus_expval * coefficients[instElement + nInstructionsElement[gradTerm]]);
+        //std::cout << "plus " << plus_expval << " " << coefficients[instElement] << "\n";
+        //std::cout << "minus " << minus_expval << " " << coefficients[instElement+ nInstructionsElement[gradTerm]] << "\n";
       }
       dx[gradTerm] = -gradElement / 2.0;
     }
     coefficients.clear();
 
-    for(auto g : dx){std::cout << "grad " << g <<"\n";}
+    std::cout << "Current gradient: \n"; 
+    for(auto param : dx){
+      std::cout << param <<" ";
+    }
+    std::cout << "\n\n";
 
-    std::reverse(dx.begin(), dx.end());
+    //std::reverse(dx.begin(), dx.end());
+    iter++;
     return;
   }
 
-  const std::string name() const override { return "adapt-vqe-gradient"; }
+  const std::string name() const override { return "circuit-learning-gradient"; }
   const std::string description() const override { return ""; }
 
 };

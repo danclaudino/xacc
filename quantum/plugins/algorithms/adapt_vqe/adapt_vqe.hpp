@@ -44,6 +44,9 @@ protected:
   double _printThreshold = 1.0e-10;
   std::vector<std::shared_ptr<Observable>> ansatzOperators;
 
+  std::vector<double> _initial_parameters;
+  std::vector<int> _initial_ansatz;
+
   HeterogeneousMap _parameters;
 
 public:

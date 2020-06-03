@@ -113,6 +113,9 @@ void VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
           for (auto inst: gradFsToExec){
             fsToExec.push_back(inst);
           }
+          std::cout << "Number of instructions for energy calculation: " << nInstructionsEnergy << "\n";
+          std::cout << "Number of instructions for gradient calculation: " << nInstructionsGradient << "\n";
+
         }
 
         auto tmpBuffer = xacc::qalloc(buffer->size());
