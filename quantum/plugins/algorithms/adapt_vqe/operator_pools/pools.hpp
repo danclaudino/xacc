@@ -21,7 +21,6 @@
 #include "FermionOperator.hpp"
 #include "ObservableTransform.hpp"
 #include <memory>
-#include <string>
 
 namespace xacc{
 namespace algorithm{

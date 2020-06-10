@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2019 UT-Battelle, LLC.
+ * Copyright (c) 2020 UT-Battelle, LLC.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * and Eclipse Distribution License v1.0 which accompanies this
@@ -8,10 +8,9 @@
  *License is available at https://eclipse.org/org/documents/edl-v10.php
  *
  * Contributors:
- *   Alexander J. McCaskey - initial API and implementation
+ *   Daniel Claudino - initial API and implementation
  *******************************************************************************/
-#include "adapt_vqe.hpp"
-#include "operator_pools/pools.hpp"
+#include "ParameterShiftGradient.hpp"
 
 #include "cppmicroservices/BundleActivator.h"
 #include "cppmicroservices/BundleContext.h"
@@ -23,20 +22,15 @@ using namespace cppmicroservices;
 
 namespace {
 
-class US_ABI_LOCAL ADAPT_VQE_Activator : public BundleActivator {
+class US_ABI_LOCAL GradientStrategyActivator : public BundleActivator {
 
 public:
-  ADAPT_VQE_Activator() {}
+  GradientStrategyActivator() {}
 
   void Start(BundleContext context) {
-    auto c = std::make_shared<xacc::algorithm::ADAPT_VQE>();
-    context.RegisterService<xacc::Algorithm>(c);
 
-    auto uccsd = std::make_shared<xacc::algorithm::UCCSD>();
-    context.RegisterService<xacc::algorithm::OperatorPool>(uccsd);
-
-    auto qpool = std::make_shared<xacc::algorithm::QubitPool>();
-    context.RegisterService<xacc::algorithm::OperatorPool>(qpool);
+    auto ps = std::make_shared<xacc::algorithm::ParameterShiftGradient>();
+    context.RegisterService<xacc::AlgorithmGradientStrategy>(ps);
 
   }
         
@@ -45,4 +39,4 @@ public:
 
 }
 
-CPPMICROSERVICES_EXPORT_BUNDLE_ACTIVATOR(ADAPT_VQE_Activator)
+CPPMICROSERVICES_EXPORT_BUNDLE_ACTIVATOR(GradientStrategyActivator)

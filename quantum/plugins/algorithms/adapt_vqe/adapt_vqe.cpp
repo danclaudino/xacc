@@ -13,8 +13,6 @@
 
 #include "adapt_vqe.hpp"
 
-#include "Observable.hpp"
-#include "PauliOperator.hpp"
 #include "FermionOperator.hpp"
 #include "ObservableTransform.hpp"
 #include "xacc.hpp"
@@ -58,13 +56,19 @@ bool ADAPT_VQE::initialize(const HeterogeneousMap &parameters) {
     _gradThreshold = parameters.get<double>("threshold");
   }
 
-  if (parameters.keyExists<double>("print_threshold")) {
-    _printThreshold = parameters.get<double>("print_threshold");
+  if (parameters.keyExists<double>("print-threshold")) {
+    _printThreshold = parameters.get<double>("print-threshold");
+  }
+
+  if (parameters.keyExists<bool>("print-operators")) {
+    _printOps = parameters.get<bool>("print-operators");
   }
 
   pool = parameters.getString("pool");
 
   // Check if Observable is Fermion or Pauli and manipulate accordingly
+  //
+  // if string has ^, it's FermionOperator
   if (observable->toString().find("^") != std::string::npos){
 
     auto jw = xacc::getService<ObservableTransform>("jw");
@@ -75,25 +79,29 @@ bool ADAPT_VQE::initialize(const HeterogeneousMap &parameters) {
       observable = jw->transform(std::dynamic_pointer_cast<Observable>(fermionObservable));      
     }
   
+  // observable is PauliOperator, but does not cast down to it
+  // Not sure about the likelihood of this happening, but want to cover all bases
   } else if (observable->toString().find("X") != std::string::npos
             || observable->toString().find("Y") != std::string::npos
             || observable->toString().find("Z") != std::string::npos
             && !std::dynamic_pointer_cast<PauliOperator>(observable)){
 
-    // observable is PauliOperator, but does not cast down to it
-    // Not sure about the likelyhood of this happening, but want to cover all bases
     auto pauliObservable = xacc::quantum::getObservable("pauli", observable->toString());
     observable = std::dynamic_pointer_cast<Observable>(pauliObservable);
 
   }
 
   if (parameters.keyExists<std::vector<double>>("initial-parameters")) {
-    _initial_parameters= parameters.get<std::vector<double>>("initial-parameters");
+    initialParameters= parameters.get<std::vector<double>>("initial-parameters");
   }
 
   if (parameters.keyExists<std::vector<int>>("initial-ansatz")) {
-    _initial_ansatz = parameters.get<std::vector<int>>("initial-ansatz");
-  } 
+    initialAnsatz = parameters.get<std::vector<int>>("initial-ansatz");
+  }
+
+  if (parameters.stringExists("gradient-strategy")) {
+    gradStrategyName = parameters.getString("gradient-strategy");
+  }
 
   return true;
 }
@@ -108,11 +116,10 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   auto ansatzInstructions = ansatzRegistry->createComposite("ansatzCircuit");
   auto operatorPool = xacc::getService<OperatorPool>(pool);
   auto operators = operatorPool->generate(buffer->size(), nElectrons);
-  std::vector<int> ansatzInstIdx;
-  std::vector<std::shared_ptr<Observable>> pauliOps, ansatzOperators;
+  std::vector<std::shared_ptr<Observable>> pauliOps;
+  std::vector<int> ansatzOps;
   auto jw = xacc::getService<ObservableTransform>("jw");
   
-
   // Mean-field state
   std::size_t j;
   for (int i = 0; i < nElectrons/2; i++) {
@@ -123,9 +130,8 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
     auto betaXGate = ansatzRegistry->createInstruction("X", std::vector<std::size_t>{j});
     ansatzInstructions->addInstruction(betaXGate);
   }
-  ansatzInstIdx.push_back(ansatzInstructions->nInstructions());
 
-  // Vector of non-vanishing commutators, need to compute them only once
+  // Vector of commutators, need to compute them only once
   std::vector<std::shared_ptr<Observable>> commutators;
   for (auto op : operators){
     std::shared_ptr<Observable> pauliOp;
@@ -134,64 +140,61 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
     } else {
       pauliOp = jw->transform(op);
     }
-    if (std::dynamic_pointer_cast<PauliOperator>(pauliOp)->getTerms().size() != 0){
-      pauliOps.push_back(pauliOp);
-      commutators.push_back(observable->commutator(pauliOp));
-    }
+    pauliOps.push_back(pauliOp);
+    commutators.push_back(observable->commutator(pauliOp));
   }
 
-  // TODO start from a known ansatz
-  int init_iter = 0;
+  int initialIter = 0;
   double oldEnergy = 0.0;
   std::vector<double> x; // these are the variational parameters
-  if (!_initial_ansatz.empty()){
 
-    for (int i = 0; i < _initial_ansatz.size(); i++){
-      ansatzOperators.push_back(pauliOps[i]);
-    }
+  // Resume from a previously optimized ansatz
+  if (!initialAnsatz.empty()){
 
-    if (!_initial_parameters.empty()){
-      x = _initial_parameters;
+    if (!initialParameters.empty()){
+      x = initialParameters;
     } else {
-      x.resize(_initial_ansatz.size());
+      x.resize(initialAnsatz.size());
     }
 
-    init_iter = _initial_ansatz.size();
+    initialIter = initialAnsatz.size();
+    for (int i = 0; i < initialAnsatz.size(); i++){
 
-    for (int i=0; i < _initial_ansatz.size(); i++){
       auto exp_i_theta = std::dynamic_pointer_cast<quantum::Circuit>(
           xacc::getService<Instruction>("exp_i_theta"));
 
       exp_i_theta->expand(
-          {std::make_pair("pauli", pauliOps[i]->toString()),
+          {std::make_pair("pauli", pauliOps[initialAnsatz[i]]->toString()),
           std::make_pair("param_id", std::string("x") + std::to_string(i)),
           std::make_pair("no-i", true)});
 
-      // Add instruction for new operator to the current ansatz
       ansatzInstructions->addVariable(std::string("x") + std::to_string(i));
+      
       for (auto& inst : exp_i_theta->getInstructions()){  
         ansatzInstructions->addInstruction(inst);
-        }
       }
+    }
+    
+    auto newOptimizer = xacc::getOptimizer(optimizer->name(),
+                  {std::make_pair(optimizer->name() + "-optimizer", optimizer->optimizer_name()),
+                  std::make_pair("initial-parameters", x)});
 
-      auto newOptimizer = xacc::getOptimizer(optimizer->name(),
-                    {std::make_pair(optimizer->name() + "-optimizer", "l-bfgs"),
-                    std::make_pair("initial-parameters", x)});
-      auto init_vqe = xacc::getAlgorithm(
-          "vqe", {std::make_pair("observable", observable),
-                  std::make_pair("optimizer", newOptimizer),
-                  std::make_pair("accelerator", accelerator),
-                  std::make_pair("ansatz", ansatzInstructions)});
-      auto tmp_buffer = xacc::qalloc(buffer->size());
-      oldEnergy = init_vqe->execute(tmp_buffer, x)[0];
-      std::cout << "Initial energy = " << oldEnergy << "\n";
+    auto init_vqe = xacc::getAlgorithm(
+        "vqe", {std::make_pair("observable", observable),
+                std::make_pair("optimizer", optimizer),
+                std::make_pair("accelerator", accelerator),
+                std::make_pair("ansatz", ansatzInstructions)});
+    auto tmp_buffer = xacc::qalloc(buffer->size());
+    oldEnergy = init_vqe->execute(tmp_buffer, x)[0];
+    std::cout << "Initial energy = " << oldEnergy << "\n";
 
   }
 
   std::cout << "Operator pool: " << operatorPool->name() << "\n";
   std::cout << "Number of operators in the pool: " << pauliOps.size() << "\n\n";
 
-  for (int iter = init_iter; iter < 1; iter++){
+  // start ADAPT loop
+  for (int iter = initialIter; iter < _maxIter; iter++){
 
     std::cout << "Iteration: " << iter + 1 << "\n";
     std::cout << "Computing [H, A]\n" << "\n";
@@ -201,9 +204,11 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
     double maxCommutator = 0.0;
     double gradientNorm = 0.0;
 
-    // Loop over non-vanishing commutators
+    // Loop over non-vanishing commutators and select the one with largest magnitude
     for (int operatorIdx = 0; operatorIdx < commutators.size(); operatorIdx++){
 
+      // only compute commutators if they aren't zero
+      if(std::dynamic_pointer_cast<PauliOperator>(commutators[operatorIdx])->getTerms().size() != 0){
       // observe the commutators with the updated circuit ansatz
       auto grad_vqe = xacc::getAlgorithm(
           "vqe", {std::make_pair("observable", commutators[operatorIdx]),
@@ -217,19 +222,21 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
         std::cout << std::setprecision(12) << "[H," << operatorIdx << "] = " << commutatorValue << "\n";
       }
 
-      if(abs(commutatorValue) > maxCommutator){
+      // update maxCommutator
+      if(abs(commutatorValue) > abs(maxCommutator)){
         maxCommutatorIdx = operatorIdx;
-        maxCommutator = abs(commutatorValue);
+        maxCommutator = commutatorValue;
       }
 
       gradientNorm += commutatorValue * commutatorValue;
+      }
     }
 
     gradientNorm = std::sqrt(gradientNorm);
     std::cout << "Max gradient component: [H, " << maxCommutatorIdx << "] = " << maxCommutator << " a.u.\n";
     std::cout << "Norm of gradient vector: " << gradientNorm << " a.u.\n";
 
-    if (gradientNorm < _gradThreshold) {
+    if (gradientNorm < _gradThreshold) { // ADAPT-VQE converged
       std::cout << "\nADAPT-VQE converged in " << iter << " iterations.\n";
       std::cout << "ADAPT-VQE energy: " << oldEnergy << " a.u.\n";
       std::cout << "Optimal parameters: \n";
@@ -239,11 +246,12 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       std::cout << "\n";
       return; 
 
-    } else if (iter < _maxIter) {
+    } else if (iter < _maxIter) { // Add operator and reoptimize 
 
       std::cout << "\nVQE optimization of current ansatz.\n\n";
 
-      ansatzOperators.push_back(pauliOps[maxCommutatorIdx]);
+      // keep track of growing ansatz
+      ansatzOps.push_back(maxCommutatorIdx);
 
       // Instruction service for the operator to be added to the ansatz
       auto maxCommutatorGate = std::dynamic_pointer_cast<quantum::Circuit>(
@@ -257,29 +265,38 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
       // Add instruction for new operator to the current ansatz
       ansatzInstructions->addVariable(std::string("x") + std::to_string(iter));
+      
+      // Append new instructions to current circuit
       for (auto& inst : maxCommutatorGate->getInstructions()){  
         ansatzInstructions->addInstruction(inst);
       }
-
+      
       // Instantiate gradient class
-      ansatzInstIdx.push_back(ansatzInstructions->nInstructions());
-      auto gradientStrategy = xacc::getService<AlgorithmGradientStrategy>("circuit-learning-gradient");
-      gradientStrategy->optionalParameters({std::make_pair("observable", observable),
-                                            std::make_pair("operators", ansatzOperators),
-                                            std::make_pair("instruction-index", ansatzInstIdx)});
+      std::shared_ptr<AlgorithmGradientStrategy> gradientStrategy;
+      if(!gradStrategyName.empty()){
+        gradientStrategy = xacc::getService<AlgorithmGradientStrategy>(gradStrategyName);
+        gradientStrategy->optionalParameters({std::make_pair("observable", observable),
+                                            std::make_pair("commutator", commutators[maxCommutatorIdx]),
+                                            std::make_pair("jw", true)
+                                            });
+      } else {
+        gradientStrategy = nullptr;
+      }
 
-      // Passing initial parameters to optimizer
+      // If using gradient-based optimizer 
+      // Convergence is improved if passing initial parameters to optimizer
+      // so we create a new instance of Optimizer with them
       std::shared_ptr<Optimizer> newOptimizer;
-      if(!x.empty()){
+      if(gradientStrategy){
         x.insert(x.begin(), 0.0);
         newOptimizer = xacc::getOptimizer(optimizer->name(),
-                      {std::make_pair(optimizer->name() + "-optimizer", "l-bfgs"),
+                      {std::make_pair(optimizer->name() + "-optimizer", optimizer->optimizer_name()),
                       std::make_pair("initial-parameters", x)});
       } else {
         newOptimizer = optimizer;
       }
 
-      // Call VQE optimization 
+      // Start VQE optimization 
       auto sub_vqe = xacc::getAlgorithm(
           "vqe", {std::make_pair("observable", observable),
                   std::make_pair("optimizer", newOptimizer),
@@ -293,12 +310,25 @@ void ADAPT_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       x = (*buffer)["opt-params"].as<std::vector<double>>();
       oldEnergy = newEnergy;
 
-      std::cout << "\nEnergy at iteration " << iter + 1 << ": " << newEnergy << "\n";
-      std::cout << "Parameters at iteration " << iter + 1 << ": \n";
+      std::cout << "\nEnergy at ADAPT iteration " << iter + 1 << ": " << newEnergy << "\n";
+      std::cout << "Parameters at ADAPT iteration " << iter + 1 << ": \n";
       for (auto param : x){
         std::cout << param << " ";
       }
-      std::cout << "\n\n";
+      std::cout << "\n";
+
+      std::cout << "Ansatz at ADAPT iteration " << iter + 1 << ": \n";
+      for (auto op : ansatzOps){
+        std::cout << op << " ";
+      }
+      std::cout << "\n";
+      if(_printOps){
+        std::cout << "Printing operators at ADAPT iteration " << iter + 1 << "\n\n";
+        for(auto op : ansatzOps){
+          std::cout << "Operator index: " << op << "\n";
+          std::cout << operators[op]->toString() << "\n\n";
+        }
+      }
 
     } else {
       std::cout << "ADAPT-VQE did not converge in " << _maxIter << " iterations.\n";

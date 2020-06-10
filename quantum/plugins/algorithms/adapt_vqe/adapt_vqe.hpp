@@ -37,17 +37,19 @@ protected:
   std::shared_ptr<Observable> observable;
   std::shared_ptr<Optimizer> optimizer;
   std::shared_ptr<Accelerator> accelerator;
-  int nElectrons;
-  std::string pool;
-  int _maxIter = 50;
-  double _gradThreshold = 1.0e-2;
-  double _printThreshold = 1.0e-10;
-  std::vector<std::shared_ptr<Observable>> ansatzOperators;
-
-  std::vector<double> _initial_parameters;
-  std::vector<int> _initial_ansatz;
-
   HeterogeneousMap _parameters;
+
+  //ADAPT-VQE parameters
+  int nElectrons; // # of electrons
+  std::string pool; // operator pool
+  int _maxIter = 50; // max # of ADAPT-VQE cycles
+  double _gradThreshold = 1.0e-2; // gradient norm threshold
+  double _printThreshold = 1.0e-10; // threshold to print commutator
+  bool _printOps = false; // set to true to print operators at every iteration
+
+  std::vector<int> initialAnsatz; // indices of operators to construct initial ansatz
+  std::vector<double> initialParameters; // initial parameters for initial ansatz
+  std::string gradStrategyName; // name of class to compute gradient for VQE optimization
 
 public:
 

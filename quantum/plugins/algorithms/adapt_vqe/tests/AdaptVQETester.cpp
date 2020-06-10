@@ -19,6 +19,7 @@
 #include "Algorithm.hpp"
 #include "PauliOperator.hpp"
 #include "xacc_observable.hpp"
+#include "AlgorithmGradientStrategy.hpp"
 
 using namespace xacc;
 using namespace xacc::quantum;
@@ -27,7 +28,7 @@ TEST(AdaptVQETester, checkSimple) {
 
   auto acc = xacc::getAccelerator("tnqvm", {std::make_pair("vqe-mode",true)});
   auto buffer = xacc::qalloc(4);
-  auto optimizer = xacc::getOptimizer("nlopt");
+  auto optimizer = xacc::getOptimizer("nlopt", {std::make_pair("nlopt-optimizer","l-bfgs")});
   auto adapt_vqe = xacc::getService<Algorithm>("adapt-vqe");
 
   auto str = std::string("(-0.165606823582,-0)  1^ 2^ 1 2 + (0.120200490713,0)  1^ 0^ 0 1 + "
@@ -60,6 +61,7 @@ TEST(AdaptVQETester, checkSimple) {
                                 std::make_pair("observable", H),
                                 std::make_pair("optimizer", optimizer),
                                 std::make_pair("pool", "uccsd"),
+                                std::make_pair("gradient-strategy", "parameter-shift-gradient"),
                                 std::make_pair("nElectrons", 2)}));
 
   adapt_vqe->execute(buffer);

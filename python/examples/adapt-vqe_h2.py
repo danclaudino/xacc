@@ -1,9 +1,6 @@
 import xacc
 
-# Get access to the desired QPU and
-# allocate some qubits to run on
 qpu = xacc.getAccelerator('tnqvm')
-#optimizer = xacc.getOptimizer('nlopt')
 optimizer = xacc.getOptimizer('nlopt',{'nlopt-optimizer':'l-bfgs'})
 buffer = xacc.qalloc(4)
 
@@ -17,6 +14,11 @@ adapt = xacc.getAlgorithm('adapt-vqe', {'accelerator': qpu,
                                   'optimizer': optimizer,
                                   'observable': H,
                                   'nElectrons': 2,
+                                  'gradient-strategy': 'parameter-shift-gradient',
+                                  'print-operators': True,
+                                  'threshold': 1.0e-2,
+                                  'print-threshold': 1.0e-10,
+                                  'maxiter': 2,
                                   'pool': "uccsd"})
 # execute
 adapt.execute(buffer)

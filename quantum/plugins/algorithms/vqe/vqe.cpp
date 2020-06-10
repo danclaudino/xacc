@@ -106,8 +106,7 @@ void VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
         if (gradientStrategy){
           
           auto gradFsToExec = gradientStrategy->getGradientExecutions(xacc::as_shared_ptr(kernel), x);
-          // Loop over the gradient instructions and add them to the instructions
-          // to be sent to the qpu
+          // Add gradient instructions to be sent to the qpu
           nInstructionsEnergy = fsToExec.size();
           nInstructionsGradient = gradFsToExec.size();
           for (auto inst: gradFsToExec){
@@ -133,7 +132,7 @@ void VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
           idBuffer->addExtraInfo("ro-fixed-exp-val-z", 1.0);
         buffer->appendChild("I", idBuffer);
 
-        if (buffers[0]->hasExtraInfoKey(
+        if (buffers[0]->hasExtraInfoKey( // this is for RDM purification
                 "purified-energy")) { // FIXME Hack for now...
           energy = buffers[0]->getInformation("purified-energy").as<double>();
           for (auto &b : buffers) {
@@ -141,12 +140,11 @@ void VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
             buffer->appendChild(b->name(), b);
           }
 
-        } else if (gradientStrategy){
+        } else if (gradientStrategy){ // gradient-based optimization
 
-          for (int i = 0; i < nInstructionsEnergy; i++) {
+          for (int i = 0; i < nInstructionsEnergy; i++) {// compute energy
             auto expval = buffers[i]->getExpectationValueZ();
             energy += expval * coefficients[i];
-            //std::cout << "exp " << expval << "coeff " << coefficients[i] <<"\n";
             buffers[i]->addExtraInfo("coefficient", coefficients[i]);
             buffers[i]->addExtraInfo("kernel", fsToExec[i]->name());
             buffers[i]->addExtraInfo("exp-val-z", expval);
@@ -154,12 +152,13 @@ void VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
             buffer->appendChild(fsToExec[i]->name(), buffers[i]);
           }
 
-          std::cout << "Energy " << energy << "\n";
+          std::cout << "Current Energy: " << energy << "\n";
 
+          // update gradient vector
           gradientStrategy->compute(dx, 
             std::vector<std::shared_ptr<AcceleratorBuffer>>(buffers.begin() + nInstructionsEnergy, buffers.end()));
         
-        } else {// normal VQE run w/o RDM purification and no gradients
+        } else {// normal VQE run
           for (int i = 0; i < buffers.size(); i++) {
             auto expval = buffers[i]->getExpectationValueZ();
             energy += expval * coefficients[i];
@@ -247,7 +246,6 @@ VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer,
     for (int i = 0; i < buffers.size(); i++) {
       auto expval = buffers[i]->getExpectationValueZ();
       energy += expval * coefficients[i];
-      //std::cout << "from vqe exp " << expval << "coeff " << coefficients[i] <<"\n";
       buffers[i]->addExtraInfo("coefficient", coefficients[i]);
       buffers[i]->addExtraInfo("kernel", fsToExec[i]->name());
       buffers[i]->addExtraInfo("exp-val-z", expval);
