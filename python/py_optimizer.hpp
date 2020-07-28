@@ -48,6 +48,14 @@ public:
       PYBIND11_OVERLOAD_PURE(void, xacc::Optimizer, setOptions, opts);
   }
 
+  const std::string get_algorithm() const override {
+    PYBIND11_OVERLOAD(const std::string, xacc::Optimizer, get_algorithm);
+  }
+
+  const bool isGradientBased() const override {
+    PYBIND11_OVERLOAD(const bool, xacc::Optimizer, isGradientBased);
+  }
+
 };
 
 void bind_optimizer(py::module& m);

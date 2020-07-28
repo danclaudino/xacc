@@ -46,7 +46,9 @@ void bind_optimizer(py::module &m) {
       .def("setOptions",
            (void (xacc::Optimizer::*)(const HeterogeneousMap &)) &
                xacc::Optimizer::setOptions,
-           "");
+           "")
+      .def("isGradientBased", &xacc::Optimizer::isGradientBased)
+      .def("get_algorithm", &xacc::Optimizer::get_algorithm);
 
   py::class_<xacc::OptFunction>(m, "OptFunction", "")
       .def(py::init<std::function<double(const std::vector<double> &,
@@ -59,3 +61,4 @@ void bind_optimizer(py::module &m) {
       }, "");
 
 }
+
