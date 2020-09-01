@@ -1,0 +1,6 @@
+{
+  "bundle.symbolic_name" : "xacc_jacobi",
+  "bundle.activator" : true,
+  "bundle.name" : "XACC Jacobi optimizer",
+  "bundle.description" : ""
+}

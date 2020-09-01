@@ -16,6 +16,7 @@
 #include "xacc.hpp"
 #include "xacc_service.hpp"
 
+#include <complex>
 #include <memory>
 #include <iomanip>
 #include <string>
@@ -127,6 +128,11 @@ void VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
             identityCoeff += std::real(coeff);
           }
         }
+
+        // pass variable coefficients if optimizer is Jacobi
+        // because we don't use the gradient in the Jacobi optimizer
+        // we can use it to pass the variable coefficients
+        if (optimizer->name() == "jacobi") dx = kernel->getVariableCoefficients();
 
         // Retrieve instructions for gradient, if a pointer of type
         // AlgorithmGradientStrategy is given

@@ -76,22 +76,22 @@ protected:
 
   std::vector<std::shared_ptr<CompositeArgument>> arguments;
 
-  // Take the concrete value and set it on the 
+  // Take the concrete value and set it on the
   // correct argument.
   template <typename T> void updateArgs(T &value) {
     // if (arguments[_internal_counter]->runtimeValue.keyExists<T>(
-            // INTERNAL_ARGUMENT_VALUE_KEY)) {
+    // INTERNAL_ARGUMENT_VALUE_KEY)) {
     //   arguments[_internal_counter]->runtimeValue.get_mutable<T>(
-        //   INTERNAL_ARGUMENT_VALUE_KEY) = value;
+    //   INTERNAL_ARGUMENT_VALUE_KEY) = value;
     // } else {
-      arguments[_internal_counter]->runtimeValue.insert(
-          INTERNAL_ARGUMENT_VALUE_KEY, value);
+    arguments[_internal_counter]->runtimeValue.insert(
+        INTERNAL_ARGUMENT_VALUE_KEY, value);
     // }
     _internal_counter++;
   }
 
-  // Recursively unpack the varidadic parameters and 
-  // call updateArgs on each one. 
+  // Recursively unpack the varidadic parameters and
+  // call updateArgs on each one.
   void constructArgs() { return; }
   template <typename First, typename... Rest>
   void constructArgs(First firstArg, Rest... rest) {
@@ -109,7 +109,8 @@ protected:
 
 public:
   CompositeInstruction() = default;
-  CompositeInstruction(const CompositeInstruction& other) : arguments(other.arguments) {}
+  CompositeInstruction(const CompositeInstruction &other)
+      : arguments(other.arguments) {}
 
   template <typename... RuntimeArgs>
   void updateRuntimeArguments(RuntimeArgs... args) {
@@ -118,7 +119,8 @@ public:
       int tmp = _count_args_counter;
       _count_args_counter = 0;
       throw std::runtime_error(
-          "[xacc error] Invalid number of runtime arguments for " + name() + ", " + std::to_string(tmp));
+          "[xacc error] Invalid number of runtime arguments for " + name() +
+          ", " + std::to_string(tmp));
     }
     _count_args_counter = 0;
     constructArgs(args...);
@@ -126,17 +128,17 @@ public:
   }
 
   void setArgumentValues(std::vector<HeterogeneousMap> args) {
-     for (int i = 0; i < arguments.size(); ++i) {
-         arguments[i]->runtimeValue = args[i];
-     }
-     return;
+    for (int i = 0; i < arguments.size(); ++i) {
+      arguments[i]->runtimeValue = args[i];
+    }
+    return;
   }
 
   void addArgument(std::shared_ptr<CompositeArgument> arg,
                    const int idx_of_inst_param) override {
     arguments.push_back(arg);
   }
- 
+
   virtual void addArgument(const std::string arg_name,
                            const std::string arg_type) {
     arguments.emplace_back(new CompositeArgument(arg_name, arg_type));
@@ -153,7 +155,7 @@ public:
   }
 
   virtual std::vector<std::shared_ptr<CompositeArgument>> getArguments() {
-      return arguments;
+    return arguments;
   }
 
   // This should return the number
@@ -210,6 +212,49 @@ public:
   virtual void setCoefficient(const std::complex<double> coefficient) = 0;
   virtual const std::complex<double> getCoefficient() = 0;
 
+  // This returns the coefficients of the Pauli strings
+  // in parameterized gates
+  std::vector<double> getVariableCoefficients() {
+
+    // get all the variables and sort them
+    auto vars = this->getVariables();
+    auto sortStrings = [](std::string a, std::string b) { return a < b; };
+    //std::sort(vars.begin(), vars.end(), sortStrings);
+
+    auto kernelInst = this->getInstructions();
+    std::vector<double> variableCoefficients;
+
+    // loop over variables
+    // look for them in the instructions
+    // once found, retrieve the coefficient
+    for (auto &var : vars) {
+
+      // this bool works as a continue for the outer loop
+      bool hasFound = false;
+      for (int i = 0; !hasFound && i < kernelInst.size(); i++) {
+
+        if (kernelInst[i]->isParameterized() &&
+            kernelInst[i]->getParameter(0).isVariable()) {
+
+          auto paramStr = kernelInst[i]->getParameter(0).as<std::string>();
+          if (var == paramStr) {
+
+            variableCoefficients.push_back(1.0);
+            hasFound = true;
+
+          } else if (paramStr.find(var) != std::string::npos) {
+
+            auto coeff = std::stod(paramStr.substr(0, paramStr.find("*")));
+            variableCoefficients.push_back(fabs(coeff));
+            hasFound = true;
+          }
+        }
+      }
+    }
+
+    return variableCoefficients;
+  }
+
   virtual std::shared_ptr<CompositeInstruction>
   operator()(const std::vector<double> &params) = 0;
 
@@ -224,8 +269,7 @@ public:
 template CompositeInstruction *
 HeterogeneousMap::getPointerLike<CompositeInstruction>(
     const std::string key) const;
-template bool
-HeterogeneousMap::pointerLikeExists<CompositeInstruction>(
+template bool HeterogeneousMap::pointerLikeExists<CompositeInstruction>(
     const std::string key) const;
 
 } // namespace xacc
