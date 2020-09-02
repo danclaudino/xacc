@@ -214,8 +214,8 @@ OptResult JacobiOptimizer::jacobi2(OptFunction &function) {
       seqX[pair.second] =
           oneGateTomography(pair.second, x, function, newMetric);
 
-      //while (fabs(newEnergy - oldEnergy) > energyThreshold) {
-      for (int i =0;i<1;i++){
+      while (fabs(newEnergy - oldEnergy) > energyThreshold) {
+      //for (int i =0;i<1;i++){
 
         oldEnergy = newEnergy;
         // update A with new B

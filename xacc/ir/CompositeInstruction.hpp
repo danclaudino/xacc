@@ -218,9 +218,6 @@ public:
 
     // get all the variables and sort them
     auto vars = this->getVariables();
-    auto sortStrings = [](std::string a, std::string b) { return a < b; };
-    //std::sort(vars.begin(), vars.end(), sortStrings);
-
     auto kernelInst = this->getInstructions();
     std::vector<double> variableCoefficients;
 
