@@ -212,46 +212,6 @@ public:
   virtual void setCoefficient(const std::complex<double> coefficient) = 0;
   virtual const std::complex<double> getCoefficient() = 0;
 
-  // This returns the coefficients of the Pauli strings
-  // in parameterized gates
-  std::vector<double> getVariableCoefficients() {
-
-    // get all the variables and sort them
-    auto vars = this->getVariables();
-    auto kernelInst = this->getInstructions();
-    std::vector<double> variableCoefficients;
-
-    // loop over variables
-    // look for them in the instructions
-    // once found, retrieve the coefficient
-    for (auto &var : vars) {
-
-      // this bool works as a continue for the outer loop
-      bool hasFound = false;
-      for (int i = 0; !hasFound && i < kernelInst.size(); i++) {
-
-        if (kernelInst[i]->isParameterized() &&
-            kernelInst[i]->getParameter(0).isVariable()) {
-
-          auto paramStr = kernelInst[i]->getParameter(0).as<std::string>();
-          if (var == paramStr) {
-
-            variableCoefficients.push_back(1.0);
-            hasFound = true;
-
-          } else if (paramStr.find(var) != std::string::npos) {
-
-            auto coeff = std::stod(paramStr.substr(0, paramStr.find("*")));
-            variableCoefficients.push_back(fabs(coeff));
-            hasFound = true;
-          }
-        }
-      }
-    }
-
-    return variableCoefficients;
-  }
-
   virtual std::shared_ptr<CompositeInstruction>
   operator()(const std::vector<double> &params) = 0;
 

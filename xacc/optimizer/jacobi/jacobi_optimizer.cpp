@@ -22,6 +22,8 @@
 // in order to comply with our convention
 
 #include "jacobi_optimizer.hpp"
+#include "CompositeInstruction.hpp"
+#include "xacc.hpp"
 #include <unsupported/Eigen/KroneckerProduct>
 #include <cmath>
 #include <functional>
@@ -30,6 +32,7 @@
 namespace xacc {
 
 const std::string JacobiOptimizer::get_algorithm() const {
+
   std::string jacobi_opt_name = "jacobi-1";
   if (options.stringExists("jacobi-optimizer")) {
     jacobi_opt_name = options.getString("jacobi-optimizer");
@@ -40,6 +43,12 @@ const std::string JacobiOptimizer::get_algorithm() const {
 
 OptResult JacobiOptimizer::optimize(OptFunction &function) {
 
+  if (!options.pointerLikeExists<CompositeInstruction>("ansatz")) {
+    xacc::error("Jacobi optimizer requires the ansatz");
+  }
+  ansatz = options.getPointerLike<CompositeInstruction>("ansatz");
+  getVariableCoefficients();
+
   // default strategy
   std::string jacobi_opt_name = "jacobi-1";
   if (options.stringExists("jacobi-optimizer")) {
@@ -48,6 +57,9 @@ OptResult JacobiOptimizer::optimize(OptFunction &function) {
 
   // number of parameterized gates
   nParams = function.dimensions();
+  x.resize(nParams, 0.0);
+  grad.resize(nParams, 0.0);
+  gateCoefficients.resize(nParams, 0.0);
 
   // check for acceleration
   if (options.stringExists("acceleration")) {
@@ -60,10 +72,7 @@ OptResult JacobiOptimizer::optimize(OptFunction &function) {
     metricHistory.resize(nParams, 1);
   }
 
-  x.resize(nParams, 0.0);
-  grad.resize(nParams, 0.0);
-  gateCoefficients.resize(nParams, 0.0);
-
+  // T^-1 Eq.10
   transferMatrixInverse1 << 1.0, 0.0, 1.0, -1.0, 2.0, -1.0, -1.0, 0.0, 1.0;
   transferMatrixInverse1 /= 2.0;
 
@@ -82,6 +91,8 @@ OptResult JacobiOptimizer::optimize(OptFunction &function) {
   if (jacobi_opt_name == "jacobi-2") {
 
     twoGateGridExpValues.resize(9);
+
+    // T^-1 for Jacobi-2 
     transferMatrixInverse2 =
         Eigen::kroneckerProduct(transferMatrixInverse1, transferMatrixInverse1);
 
@@ -97,6 +108,7 @@ OptResult JacobiOptimizer::optimize(OptFunction &function) {
           clusterSeq2.push_back(std::make_pair(j, i));
         }
       }
+
     }
 
     return jacobi2(function);
@@ -106,13 +118,11 @@ OptResult JacobiOptimizer::optimize(OptFunction &function) {
 // This implements the Jacobi-1 strategy
 OptResult JacobiOptimizer::jacobi1(OptFunction &function) {
 
-  std::vector<double> newX(nParams), oldX(nParams), oldMetric(nParams),
-      newMetric(nParams);
+  std::vector<double> newX(nParams), oldMetric(nParams), newMetric(nParams);
   double newEnergy, oldEnergy;
 
   // Compute <H(0.0,..., 0.0)> only once
   oneGateGridExpValues(1) = function(x, grad);
-  gateCoefficients = grad;
 
   _maxiter = 2;
   // loop until norm of error/gradient vector is small
@@ -186,15 +196,14 @@ OptResult JacobiOptimizer::jacobi1(OptFunction &function) {
 // for simultaneous optimization of parameters for two gates
 OptResult JacobiOptimizer::jacobi2(OptFunction &function) {
 
-  std::vector<double> newX(nParams), oldX(nParams), oldMetric(nParams),
+  std::vector<double> newX(nParams), oldMetric(nParams),
       newMetric(nParams), energies(nParams, 0.0);
-  double zeroExpValue;
+  double zeroExpValue, newEnergy;
 
   // Compute <H(0.0,..., 0.0)> only once
   zeroExpValue = function(x, grad);
   twoGateGridExpValues(4) = zeroExpValue;
   oneGateGridExpValues(1) = zeroExpValue;
-  gateCoefficients = grad;
 
   _maxiter = 1;
 
@@ -208,12 +217,14 @@ OptResult JacobiOptimizer::jacobi2(OptFunction &function) {
     for (auto pair : clusterSeq2) {
 
       auto seqX = x;
-      double oldEnergy = 0.0, newEnergy = zeroExpValue;
+      double oldEnergy = 0.0;
+      newEnergy = zeroExpValue;
 
       // update B
       seqX[pair.second] =
           oneGateTomography(pair.second, x, function, newMetric);
 
+      
       while (fabs(newEnergy - oldEnergy) > energyThreshold) {
       //for (int i =0;i<1;i++){
 
@@ -240,8 +251,8 @@ OptResult JacobiOptimizer::jacobi2(OptFunction &function) {
     }
   }
 
-  // seg faulting here
-  // malloc_consolidate(): invalid chunk size
+  OptResult result(newEnergy, newX);
+  return result;
 }
 
 std::vector<double> JacobiOptimizer::DIIS(Eigen::MatrixXd metric) {
@@ -344,5 +355,43 @@ double JacobiOptimizer::twoGateTomography(const int paramIdx1,
 
   return optimalParam;
 }
+
+  // This returns the coefficients of the Pauli strings
+  // in parameterized gates
+  void JacobiOptimizer::getVariableCoefficients() {
+
+    // get all the variables and sort them
+    auto vars = ansatz->getVariables();
+    auto kernelInst = ansatz->getInstructions();
+
+    // loop over variables
+    // look for them in the instructions
+    // once found, retrieve the coefficient
+    for (auto &var : vars) {
+
+      // this bool works as a continue for the outer loop
+      bool hasFound = false;
+      for (int i = 0; !hasFound && i < kernelInst.size(); i++) {
+
+        if (kernelInst[i]->isParameterized() &&
+            kernelInst[i]->getParameter(0).isVariable()) {
+
+          auto paramStr = kernelInst[i]->getParameter(0).as<std::string>();
+          if (var == paramStr) {
+
+            gateCoefficients.push_back(1.0);
+            hasFound = true;
+
+          } else if (paramStr.find(var) != std::string::npos) {
+
+            auto coeff = std::stod(paramStr.substr(0, paramStr.find("*")));
+            gateCoefficients.push_back(fabs(coeff));
+            hasFound = true;
+          }
+        }
+      }
+    }
+
+  }
 
 } // namespace xacc

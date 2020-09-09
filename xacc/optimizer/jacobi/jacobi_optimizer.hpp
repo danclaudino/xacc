@@ -17,6 +17,7 @@
 #include <type_traits>
 #include <utility>
 #include <Eigen/Dense>
+#include "CompositeInstruction.hpp"
 #include "Optimizer.hpp"
 #include "xacc.hpp"
 
@@ -44,6 +45,7 @@ protected:
   Eigen::Matrix3d transferMatrixInverse1;
   Eigen::Vector3d oneGateGridExpValues;
   Eigen::VectorXd twoGateGridExpValues;
+  CompositeInstruction* ansatz;
 
   OptResult jacobi1(OptFunction &function);
   
@@ -54,6 +56,8 @@ protected:
   double oneGateTomography(const int paramIdx, const std::vector<double> x, OptFunction &function, std::vector<double>& metric);
 
   double twoGateTomography(const int paramIdx1, const int paramIdx2, const std::vector<double> x, OptFunction &function, std::vector<double>& metric);
+
+  void getVariableCoefficients();
 
 };
 } // namespace xacc
