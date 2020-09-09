@@ -24,6 +24,8 @@
 #include "jacobi_optimizer.hpp"
 #include "CompositeInstruction.hpp"
 #include "xacc.hpp"
+#include <iostream>
+#include <string>
 #include <unsupported/Eigen/KroneckerProduct>
 #include <cmath>
 #include <functional>
@@ -44,10 +46,20 @@ const std::string JacobiOptimizer::get_algorithm() const {
 OptResult JacobiOptimizer::optimize(OptFunction &function) {
 
   if (!options.pointerLikeExists<CompositeInstruction>("ansatz")) {
-    xacc::error("Jacobi optimizer requires the ansatz");
+    xacc::error("Jacobi optimizer requires ansatz.");
   }
   ansatz = options.getPointerLike<CompositeInstruction>("ansatz");
   getVariableCoefficients();
+
+  // number of parameterized gates
+  nParams = function.dimensions();
+  x.resize(nParams, 0.0);
+  grad.resize(nParams, 0.0);
+  gateCoefficients.resize(nParams, 0.0);
+
+  if (options.keyExists<int>("max-iter")) {
+    _maxiter = options.get<int>("max-iter");
+  }
 
   // default strategy
   std::string jacobi_opt_name = "jacobi-1";
@@ -55,11 +67,9 @@ OptResult JacobiOptimizer::optimize(OptFunction &function) {
     jacobi_opt_name = options.getString("jacobi-optimizer");
   }
 
-  // number of parameterized gates
-  nParams = function.dimensions();
-  x.resize(nParams, 0.0);
-  grad.resize(nParams, 0.0);
-  gateCoefficients.resize(nParams, 0.0);
+  if (options.keyExists<std::vector<double>>("initial-parameters")) {
+    x = options.get<std::vector<double>>("initial-parameters");
+  }
 
   // check for acceleration
   if (options.stringExists("acceleration")) {
@@ -92,7 +102,7 @@ OptResult JacobiOptimizer::optimize(OptFunction &function) {
 
     twoGateGridExpValues.resize(9);
 
-    // T^-1 for Jacobi-2 
+    // T^-1 for Jacobi-2
     transferMatrixInverse2 =
         Eigen::kroneckerProduct(transferMatrixInverse1, transferMatrixInverse1);
 
@@ -108,7 +118,6 @@ OptResult JacobiOptimizer::optimize(OptFunction &function) {
           clusterSeq2.push_back(std::make_pair(j, i));
         }
       }
-
     }
 
     return jacobi2(function);
@@ -118,20 +127,23 @@ OptResult JacobiOptimizer::optimize(OptFunction &function) {
 // This implements the Jacobi-1 strategy
 OptResult JacobiOptimizer::jacobi1(OptFunction &function) {
 
-  std::vector<double> newX(nParams), oldMetric(nParams), newMetric(nParams);
-  double newEnergy, oldEnergy;
+  std::vector<double> newX(nParams), oldMetric(nParams), newMetric(nParams);  double newEnergy, oldEnergy;
+
+  //x = {0.029015,0.0738529,0.180889,3.14159,-0.365736,0.36839,0.251891,-0.32402,0.521866,-0.00818221,-0.000298443,0.000325541,0.0723386,0.00104239,-0.254858,0.000291049,-0.308244,0.0631585,-0.0314899,0.227916};
 
   // Compute <H(0.0,..., 0.0)> only once
-  oneGateGridExpValues(1) = function(x, grad);
+  auto zeroExpValue = function(x, grad);
+  oneGateGridExpValues(1) = zeroExpValue;
+  oldEnergy = zeroExpValue;
 
-  _maxiter = 2;
   // loop until norm of error/gradient vector is small
   for (int iter = 0; iter < _maxiter; iter++) {
 
+    xacc::info("Jacobi optimizer iteration: " + std::to_string(iter + 1));
     // error vector norm
     double norm = 0.0;
 
-    // compute the objective function for the grid points
+    // compute the objective function for the grid points:q
     // for each parameter in the clusterSeq
     for (int i : clusterSeq1) {
 
@@ -144,33 +156,38 @@ OptResult JacobiOptimizer::jacobi1(OptFunction &function) {
 
       // Compute energy with new parameter and store it
       newEnergy = function(seqX, grad);
-      newX[i] = seqX[i];
+      if(newEnergy < oldEnergy){
+        newX[i] = seqX[i];
+      }
     }
 
     // compute norm of the error metric
     for (int i = 0; i < nParams; i++) {
-      norm += std::pow(newMetric[i] - oldMetric[i], 2);
+      norm += std::pow(newX[i] - x[i], 2);
     }
     norm = std::sqrt(norm);
 
+    xacc::info("Norm of metric vector: " + std::to_string(norm));
     // if norm is small, stop
-    if (norm < _threshold)
+    // if not, update metric
+    if (norm < _threshold){
       break;
+    } else {
+      oldMetric = newMetric;
+    }
 
     // Use acceleration (Anderson or Pulay)
     // add error/gradient vector to history
     // delete oldest vector if necessary
     // pass history to the DIIS function
-    if (iter > 1 && !acceleration.empty()) {
+    if (!acceleration.empty()) {
 
       Eigen::Map<Eigen::VectorXd> eigenMetric(newMetric.data(),
                                               newMetric.size());
-
       if (metricHistory.cols() < maxMetricHistory) {
 
         metricHistory.conservativeResize(Eigen::NoChange,
                                          metricHistory.cols() + 1);
-        metricHistory.col(metricHistory.cols() - 1) = eigenMetric;
 
       } else {
 
@@ -178,15 +195,17 @@ OptResult JacobiOptimizer::jacobi1(OptFunction &function) {
                             metricHistory.cols() - 2) =
             metricHistory.block(0, 1, metricHistory.rows() - 1,
                                 metricHistory.cols() - 1);
-        metricHistory.col(metricHistory.cols() - 1) = eigenMetric;
       }
+      metricHistory.col(metricHistory.cols() - 1) = eigenMetric;
+      x = DIIS(metricHistory);
 
     } else {
       x = newX;
     }
+    oldEnergy = function(x, grad);
   }
 
-  OptResult result(newEnergy, newX);
+  OptResult result(newEnergy, x);
 
   return result;
 }
@@ -196,8 +215,8 @@ OptResult JacobiOptimizer::jacobi1(OptFunction &function) {
 // for simultaneous optimization of parameters for two gates
 OptResult JacobiOptimizer::jacobi2(OptFunction &function) {
 
-  std::vector<double> newX(nParams), oldMetric(nParams),
-      newMetric(nParams), energies(nParams, 0.0);
+  std::vector<double> newX(nParams), oldMetric(nParams), newMetric(nParams),
+      energies(nParams, 0.0);
   double zeroExpValue, newEnergy;
 
   // Compute <H(0.0,..., 0.0)> only once
@@ -209,12 +228,15 @@ OptResult JacobiOptimizer::jacobi2(OptFunction &function) {
 
   for (int iter = 0; iter < _maxiter; iter++) {
 
+    xacc::info("Jacobi optimizer iteration: " + std::to_string(iter + 1));
     // error vector norm
     double norm = 0.0;
 
     // compute the objective function for the grid points
     // for each parameter in the clusterSeq
     for (auto pair : clusterSeq2) {
+
+      std::cout << "Gate 1: " << pair.first << "\tGate 2: " << pair.second <<"\n";
 
       auto seqX = x;
       double oldEnergy = 0.0;
@@ -224,9 +246,8 @@ OptResult JacobiOptimizer::jacobi2(OptFunction &function) {
       seqX[pair.second] =
           oneGateTomography(pair.second, x, function, newMetric);
 
-      
       while (fabs(newEnergy - oldEnergy) > energyThreshold) {
-      //for (int i =0;i<1;i++){
+        // for (int i =0;i<1;i++){
 
         oldEnergy = newEnergy;
         // update A with new B
@@ -239,16 +260,17 @@ OptResult JacobiOptimizer::jacobi2(OptFunction &function) {
         newEnergy = function(seqX, grad);
       }
 
-      if (newEnergy < energies[pair.first]){
+      if (newEnergy < energies[pair.first]) {
         newX[pair.first] = seqX[pair.first];
         energies[pair.first] = newEnergy;
       }
 
-      if (newEnergy < energies[pair.second]){
+      if (newEnergy < energies[pair.second]) {
         newX[pair.second] = seqX[pair.second];
         energies[pair.second] = newEnergy;
       }
     }
+
   }
 
   OptResult result(newEnergy, newX);
@@ -274,14 +296,15 @@ std::vector<double> JacobiOptimizer::DIIS(Eigen::MatrixXd metric) {
   Eigen::VectorXd extrapCoeffs = B.colPivHouseholderQr().solve(x);
 
   // parameter extrapolation
-  Eigen::VectorXd parameterUpdate = Eigen::VectorXd::Zero(nCols);
-  for (int i = 0; i < nCols; i++) {
+  Eigen::VectorXd parameterUpdate = Eigen::VectorXd::Zero(nParams);
+  for (int i = 0; i < nParams; i++) {
     parameterUpdate += extrapCoeffs(i) * metric.col(i);
   }
 
   std::vector<double> newX(parameterUpdate.data(),
                            parameterUpdate.data() + parameterUpdate.size());
 
+  std::cout << "SIZE " << parameterUpdate.size()<<"\n";
   return newX;
 }
 
@@ -303,7 +326,7 @@ double JacobiOptimizer::oneGateTomography(const int paramIdx,
   Eigen::Vector3d tomoParams = transferMatrixInverse1 * oneGateGridExpValues;
 
   double optimalParam =
-      atan2(-tomoParams(2), -tomoParams(1));// * gateCoefficients[paramIdx];
+      atan2(-tomoParams(2), -tomoParams(1)) * gateCoefficients[paramIdx];
 
   if (acceleration == "pulay") {
     metric[paramIdx] =
@@ -356,42 +379,41 @@ double JacobiOptimizer::twoGateTomography(const int paramIdx1,
   return optimalParam;
 }
 
-  // This returns the coefficients of the Pauli strings
-  // in parameterized gates
-  void JacobiOptimizer::getVariableCoefficients() {
+// This retrieves the coefficients of the Pauli strings
+// in parameterized gates
+void JacobiOptimizer::getVariableCoefficients() {
 
-    // get all the variables and sort them
-    auto vars = ansatz->getVariables();
-    auto kernelInst = ansatz->getInstructions();
+  // get all the variables and instructions in the ansatz
+  auto vars = ansatz->getVariables();
+  auto kernelInst = ansatz->getInstructions();
 
-    // loop over variables
-    // look for them in the instructions
-    // once found, retrieve the coefficient
-    for (auto &var : vars) {
+  // loop over variables
+  // look for them in the instructions
+  // once found, retrieve the coefficient
+  for (auto &var : vars) {
 
-      // this bool works as a continue for the outer loop
-      bool hasFound = false;
-      for (int i = 0; !hasFound && i < kernelInst.size(); i++) {
+    // this bool works as a continue for the outer loop
+    bool hasFound = false;
+    for (int i = 0; !hasFound && i < kernelInst.size(); i++) {
 
-        if (kernelInst[i]->isParameterized() &&
-            kernelInst[i]->getParameter(0).isVariable()) {
+      if (kernelInst[i]->isParameterized() &&
+          kernelInst[i]->getParameter(0).isVariable()) {
 
-          auto paramStr = kernelInst[i]->getParameter(0).as<std::string>();
-          if (var == paramStr) {
+        auto paramStr = kernelInst[i]->getParameter(0).as<std::string>();
+        if (var == paramStr) {
 
-            gateCoefficients.push_back(1.0);
-            hasFound = true;
+          gateCoefficients.push_back(1.0);
+          hasFound = true;
 
-          } else if (paramStr.find(var) != std::string::npos) {
+        } else if (paramStr.find(var) != std::string::npos) {
 
-            auto coeff = std::stod(paramStr.substr(0, paramStr.find("*")));
-            gateCoefficients.push_back(fabs(coeff));
-            hasFound = true;
-          }
+          auto coeff = std::stod(paramStr.substr(0, paramStr.find("*")));
+          gateCoefficients.push_back(fabs(coeff));
+          hasFound = true;
         }
       }
     }
-
   }
+}
 
 } // namespace xacc
