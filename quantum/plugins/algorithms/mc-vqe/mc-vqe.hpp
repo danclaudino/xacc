@@ -28,17 +28,31 @@ protected:
   HeterogeneousMap parameters;
   std::shared_ptr<AlgorithmGradientStrategy> gradientStrategy;
 
-  // MC-VQE stuff
-  int nChromophores;             // number of chromophores
-  bool isCyclic;                 // true if the molecular system is cyclic
-  Eigen::MatrixXd CISGateAngles; // state preparation angles
-  std::shared_ptr<Observable> observable; // AIEM Hamiltonian
-  int nStates;                    // # number of CIS states = nChromophores + 1
-  const int NPARAMSENTANGLER = 4; // # of parameters in a single entangler
-  const double ANGSTROM2BOHR = 1.8897161646320724; // angstrom to bohr
-  const double DEBYE2AU = 0.393430307;             // D to a.u.
-  std::string dataPath; // path to file with quantum chemistry data
-  std::chrono::system_clock::time_point start; // start time of simulation
+  // MC-VQE variables
+
+  // number of chromophores
+  int nChromophores;      
+  // true if the molecular system is cyclic       
+  bool isCyclic;            
+  // if false, will not compute interference matrix     
+  bool doInterference = true;
+  // state preparation angles
+  Eigen::MatrixXd CISGateAngles; 
+  // AIEM Hamiltonian
+  std::shared_ptr<Observable> observable;
+  // # number of CIS states = nChromophores + 1
+  int nStates;            
+  // # of parameters in a single entangler
+  // after merging adjacent Ry gates        
+  const int NPARAMSENTANGLER = 4; 
+  // angstrom to bohr
+  const double ANGSTROM2BOHR = 1.8897161646320724; 
+   // D to a.u.
+  const double DEBYE2AU = 0.393430307;
+  // path to file with quantum chemistry data            
+  std::string dataPath; 
+  // start time of simulation
+  std::chrono::system_clock::time_point start; 
 
   // constructs CIS state preparation circiuit
   std::shared_ptr<CompositeInstruction>

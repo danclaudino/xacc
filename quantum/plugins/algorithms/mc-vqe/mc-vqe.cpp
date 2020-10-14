@@ -33,13 +33,19 @@ bool MC_VQE::initialize(const HeterogeneousMap &parameters) {
   if (!parameters.pointerLikeExists<Accelerator>("accelerator")) {
     std::cout << "Acc was false\n";
     return false;
-  } else if (!parameters.pointerLikeExists<Optimizer>("optimizer")) {
+  }
+
+  if (!parameters.pointerLikeExists<Optimizer>("optimizer")) {
     std::cout << "Opt was false\n";
     return false;
-  } else if (!parameters.keyExists<int>("nChromophores")) {
+  }
+
+  if (!parameters.keyExists<int>("nChromophores")) {
     std::cout << "Missing number of chromophores\n";
     return false;
-  } else if (!parameters.stringExists("data-path")) {
+  }
+
+  if (!parameters.stringExists("data-path")) {
     std::cout << "Missing data file\n";
     return false;
   }
@@ -61,9 +67,14 @@ bool MC_VQE::initialize(const HeterogeneousMap &parameters) {
     logLevel = parameters.get<int>("log-level");
   }
 
-  // Turns TNQVM on/off
+  // Turns TNQVM logging on/off
   if (parameters.keyExists<bool>("tnqvm-log")) {
     tnqvmLog = parameters.get<bool>("tnqvm-log");
+  }
+
+  // Control whether interference matrix is computed
+  if (parameters.keyExists<bool>("interference")) {
+    doInterference = parameters.get<bool>("interference");
   }
 
   nStates = nChromophores + 1;
@@ -77,8 +88,7 @@ bool MC_VQE::initialize(const HeterogeneousMap &parameters) {
   if (parameters.stringExists("gradient-strategy")) {
     gradientStrategy = xacc::getService<AlgorithmGradientStrategy>(
         parameters.getString("gradient-strategy"));
-    gradientStrategy->initialize(
-        {std::make_pair("observable", observable)});
+    gradientStrategy->initialize({std::make_pair("observable", observable)});
   }
 
   auto endPrep = std::chrono::high_resolution_clock::now();
@@ -88,7 +98,6 @@ bool MC_VQE::initialize(const HeterogeneousMap &parameters) {
   logControl("AIEM Hamiltonian and state preparation parameters [" +
                  std::to_string(prepTime) + " s]",
              1);
-  // nStates = 2;
   return true;
 }
 
@@ -98,12 +107,12 @@ const std::vector<std::string> MC_VQE::requiredParameters() const {
 
 void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
-  // entangledHamiltonian stores the Hamiltonian matrix elements in the basis of
-  // MC states
+  // entangledHamiltonian stores the Hamiltonian matrix elements
+  // in the basis ofMC states
   Eigen::MatrixXd entangledHamiltonian(nStates, nStates);
   entangledHamiltonian.setZero();
 
-  // all CIS states share the same entangler gates
+  // all CIS states share the same parameterized entangler gates
   auto entangler = entanglerCircuit();
   // number of parameters to be optimized
   auto nOptParams = entangler->nVariables();
@@ -119,85 +128,47 @@ void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       [&, this](const std::vector<double> &x, std::vector<double> &dx) {
         // MC-VQE minimizes the average energy over all MC states
         double averageEnergy = 0.0;
-
         auto startIter = std::chrono::high_resolution_clock::now();
 
         // we take the gradient of the average energy as the average over
         // the gradients of each state
         std::vector<double> averageGrad(x.size());
 
-        for (int state = 0; state < nStates; state++) { // loop over states
+        // loop over states
+        for (int state = 0; state < nStates; state++) {
 
-          // coefficients = weights of each term in the observed Hamiltonian
-          // fsToExec = functions the accelerator will execute to compute the
-          // energy
-          std::vector<double> coefficients;
-          std::vector<std::shared_ptr<CompositeInstruction>> fsToExec;
+          // fsToExec stores observed circuits to compute gradients
+          std::vector<std::shared_ptr<CompositeInstruction>> gradFsToExec;
 
-          // prepare CIS state
+          // retrieve CIS state preparation instructions and add entangler
           auto kernel = statePreparationCircuit(CISGateAngles.col(state));
-          // add entangler variables
           kernel->addVariables(entangler->getVariables());
           for (auto &inst : entangler->getInstructions()) {
-            kernel->addInstruction(inst); // append entangler gates
+            kernel->addInstruction(inst);
           }
 
           logControl("Printing circuit for state #" + std::to_string(state), 3);
           logControl(kernel->toString(), 3);
 
-          // observe AIEM Hamiltonian in the circuit above
-          auto kernels = observable->observe(kernel);
-
-          double identityCoeff = 0.0;
-          int nInstructionsEnergy = 0, nInstructionsGradient = 0;
-          logControl(
-              "Printing instructions for state #" + std::to_string(state), 4);
-          // loop over CompositeInstructions from observe
-          for (auto &f : kernels) {
-
-            logControl(f->toString(), 4);
-            std::complex<double> coeff = f->getCoefficient();
-
-            int nFunctionInstructions = 0;
-            if (f->getInstruction(0)->isComposite()) {
-              // checks whether f is Composite or single Instruction and
-              // retrieve number of instructions
-              nFunctionInstructions =
-                  kernel->nInstructions() + f->nInstructions() - 1;
-            } else {
-              nFunctionInstructions = f->nInstructions();
-            }
-
-            if (nFunctionInstructions > kernel->nInstructions()) {
-              // checks if f has parameterized instructions
-              auto evaled = f->operator()(x);
-              fsToExec.push_back(evaled);
-              coefficients.push_back(std::real(coeff));
-            } else {
-              identityCoeff += std::real(coeff);
-            }
-          }
+          // Cleaned this up by calling VQE
+          auto vqe = xacc::getAlgorithm("vqe", {{"accelerator", accelerator},
+                                                {"observable", observable},
+                                                {"ansatz", kernel}});
+          auto tmpBuffer = xacc::qalloc(buffer->size());
+          energy = vqe->execute(q, {})[0];
 
           // Retrieve instructions for gradient, if a pointer of type
           // AlgorithmGradientStrategy is given
           if (gradientStrategy) {
 
             // Gradient instructions to be sent to the qpu
-            auto gradFsToExec =
-                gradientStrategy->getGradientExecutions(kernel, x);
-            nInstructionsEnergy = fsToExec.size();
-            nInstructionsGradient = gradFsToExec.size();
+            gradFsToExec = gradientStrategy->getGradientExecutions(kernel, x);
 
-            // Here we append the instructions for the gradient to those for the
-            // energy
-            for (auto inst : gradFsToExec) {
-              fsToExec.push_back(inst);
-            }
             logControl("Number of instructions for energy calculation: " +
-                           std::to_string(nInstructionsEnergy),
+                           std::to_string(observable->nTerms()),
                        1);
             logControl("Number of instructions for gradient calculation: " +
-                           std::to_string(nInstructionsGradient),
+                           std::to_string(gradFsToExec.size()),
                        1);
           }
 
@@ -206,69 +177,35 @@ void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
           if (tnqvmLog) {
             xacc::set_verbose(true);
           }
-          // temp instance of AcceleratorBuffer
-          auto tmpBuffer = xacc::qalloc(buffer->size());
-          // execute parametrized instructions with tmpBuffer
-          accelerator->execute(tmpBuffer, fsToExec);
-          // children buffers one for each executed function
-          auto buffers = tmpBuffer->getChildren();
-          if (tnqvmLog) {
-            xacc::set_verbose(false);
-          }
 
-          // add info to the buffer holding the I term
-          double energy = identityCoeff;
-          auto idBuffer = xacc::qalloc(buffer->size());
-          idBuffer->addExtraInfo("coefficient", identityCoeff);
-          idBuffer->setName("I");
-          idBuffer->addExtraInfo("kernel", "I");
-          idBuffer->addExtraInfo("parameters", x);
-          idBuffer->addExtraInfo("exp-val-z", 1.0);
-          if (accelerator->name() == "ro-error")
-            idBuffer->addExtraInfo("ro-fixed-exp-val-z", 1.0);
-          buffer->appendChild("I", idBuffer);
-
-          // handles the info from the remaining children buffers
-          if (gradientStrategy) { // gradient-based optimization
-
-            // compute energy first
-            for (int i = 0; i < nInstructionsEnergy; i++) {
-              auto expval = buffers[i]->getExpectationValueZ();
-              energy += expval * coefficients[i];
-              buffers[i]->addExtraInfo("coefficient", coefficients[i]);
-              buffers[i]->addExtraInfo("kernel", fsToExec[i]->name());
-              buffers[i]->addExtraInfo("exp-val-z", expval);
-              buffers[i]->addExtraInfo("parameters", x);
-              buffer->appendChild(fsToExec[i]->name(), buffers[i]);
-            }
+          // gradient-based optimization
+          if (gradientStrategy) {
 
             std::stringstream ss;
             ss << std::setprecision(12) << "Current Energy: " << energy;
             logControl(ss.str(), 1);
             ss.str(std::string());
 
+            // temp instance of AcceleratorBuffer
+            auto tmpBuffer = xacc::qalloc(buffer->size());
+            // execute parametrized instructions with tmpBuffer
+            accelerator->execute(tmpBuffer, fsToExec);
+            // children buffers one for each executed function
+            auto buffers = tmpBuffer->getChildren();
+            if (tnqvmLog) {
+              xacc::set_verbose(false);
+            }
+
             // update gradient vector
-            gradientStrategy->compute(
-                dx, std::vector<std::shared_ptr<AcceleratorBuffer>>(
-                        buffers.begin() + nInstructionsEnergy, buffers.end()));
+            gradientStrategy->compute(dx, buffer);
 
             // Because AlgorithmGradientStrategy methods take reference to both
             // x and dx we need to keep track of the gradient for each state
             for (int i = 0; i < dx.size(); i++) {
               averageGrad[i] += dx[i] / nStates;
             }
-
-          } else { // normal VQE run
-            for (int i = 0; i < buffers.size(); i++) {
-              auto expval = buffers[i]->getExpectationValueZ();
-              energy += expval * coefficients[i];
-              buffers[i]->addExtraInfo("coefficient", coefficients[i]);
-              buffers[i]->addExtraInfo("kernel", fsToExec[i]->name());
-              buffers[i]->addExtraInfo("exp-val-z", expval);
-              buffers[i]->addExtraInfo("parameters", x);
-              buffer->appendChild(fsToExec[i]->name(), buffers[i]);
-            }
           }
+
           // state energy goes to the diagonal of entangledHamiltonian
           diagonal(state) = energy;
           averageEnergy += energy;
