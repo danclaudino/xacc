@@ -1,16 +1,54 @@
 #include "xacc.hpp"
-#include "xacc_service.hpp"
-#include "Algorithm.hpp"
+#include "Utils.hpp"
 #include <fstream>
+#include <sstream>
 
 int main(int argc, char **argv) {
   xacc::Initialize(argc, argv);
 
-  //xacc::set_verbose(true);
-  xacc::logToFile(true);
-  //xacc::setLoggingLevel(2);
+  std::vector<std::string> arguments(argv + 1, argv + argc);
+  int n_virt_qpus = 1, exatnLogLevel = 2, mcvqeLogLevel = 1, n_chromophores = 4,
+      exatnBufferSize = 2;
+  std::string acc = "tnqvm";
 
-  int n_chromophores = std::stoi(argv[2]);
+  for (int i = 0; i < arguments.size(); i++) {
+    if (arguments[i] == "--n-chromophores") {
+      n_chromophores = std::stoi(arguments[i + 1]);
+    }
+    if (arguments[i] == "--n-virtual-qpus") {
+      n_virt_qpus = std::stoi(arguments[i + 1]);
+    }
+    if (arguments[i] == "--exatn-log-level") {
+      exatnLogLevel = std::stoi(arguments[i + 1]);
+    }
+    if (arguments[i] == "--mcvqe-log-level") {
+      mcvqeLogLevel = std::stoi(arguments[i + 1]);
+    }
+    if (arguments[i] == "--exatn-buffer-size") {
+      exatnBufferSize = std::stoi(arguments[i + 1]);
+    }
+    if (arguments[i] == "--verbose") {
+      if (arguments[i + 1] == "true" || arguments[i + 1] == "1") {
+        xacc::set_verbose(true);
+      } else {
+        xacc::set_verbose(false);
+      }
+    }
+    if (arguments[i] == "--accelerator") {
+      acc = arguments[i + 1];
+    }
+  }
+
+  std::cout << "N chromophores " << n_chromophores << "\n";
+  std::cout << "N virtual QPUs" << n_virt_qpus << "\n";
+  std::cout << "exatn log " << exatnLogLevel << "\n";
+  std::cout << "mcvqe log " << mcvqeLogLevel << "\n";
+  std::cout << "exatn buffer " << exatnBufferSize << "\n";  
+  std::cout << "accelerator " << acc << "\n";  
+
+
+  //xacc::logToFile(true);
+  xacc::setLoggingLevel(exatnLogLevel);
 
   const char *data = R"foo(0
 Ground state energy: -2263.263771754
@@ -161,25 +199,44 @@ Transition dipole moment: 1.5656,2.8158,-0.0976
   datafile << data;
   datafile.close();
   std::string path = "./datafile.txt";
-  auto optimizer =
-      xacc::getOptimizer("nlopt", {std::make_pair("nlopt-maxeval", 2)});
+  auto optimizer = xacc::getOptimizer("nlopt", {{"nlopt-maxeval", 2}});
 
   // ExaTN visitor
-  auto exatn =
-      xacc::getAccelerator("tnqvm", {std::make_pair("tnqvm-visitor", "exatn"),
-                                     std::make_pair("vqe-mode", true),
-                                     std::make_pair("exatn-buffer-size-gb", 2)});
-  auto buffer2 = xacc::qalloc(n_chromophores);
-  auto mc_vqe2 = xacc::getAlgorithm("mc-vqe");
+  std::shared_ptr<xacc::Accelerator> accelerator;
+  if (acc == "tnqvm") {
+    accelerator = xacc::getAccelerator(
+        "tnqvm", {{"tnqvm-visitor", "exatn"},
+                  {"exatn-buffer-size-gb", exatnBufferSize}});
+  } else if (acc == "qpp") {
+    accelerator = xacc::getAccelerator("qpp");
+  } else if (acc == "aer") {
+    accelerator = xacc::getAccelerator("aer");
+  }
 
-  mc_vqe2->initialize(
-      {std::make_pair("accelerator", exatn),
-       std::make_pair("optimizer", optimizer),
-       std::make_pair("data-path", path), std::make_pair("cyclic", true),
-       std::make_pair("log-level", 2), std::make_pair("tnqvm-log", true),
-       std::make_pair("nChromophores", n_chromophores)});
-  mc_vqe2->execute(buffer2);
+  // decorate accelerator
+  accelerator = xacc::getAcceleratorDecorator(
+      "hpc-virtualization", accelerator, {{"n-virtual-qpus", n_virt_qpus}});
 
+  auto mc_vqe = xacc::getAlgorithm("mc-vqe");
+  mc_vqe->initialize(
+      {{"accelerator", accelerator},
+       {"optimizer", optimizer},
+       {"data-path", path}, {"cyclic", true},
+       {"log-level", mcvqeLogLevel}, {"tnqvm-log", true},
+       {"nChromophores", n_chromophores}});
+
+  auto q = xacc::qalloc(n_chromophores);
+  xacc::ScopeTimer timer("mpi_timing", false);
+  mc_vqe->execute(q);
+  auto run_time = timer.getDurationMs();
+
+  // Print the result
+  if (q->hasExtraInfoKey("rank") ? ((*q)["rank"].as<int>() == 0) : true) {
+    std::cout << "Energy: "
+              << q->getInformation("opt-average-energy").as<double>()
+              << " Hartree\n";
+    std::cout << "Runtime: " << run_time << " ms.\n";
+  }
 
   ///
   xacc::Finalize();
