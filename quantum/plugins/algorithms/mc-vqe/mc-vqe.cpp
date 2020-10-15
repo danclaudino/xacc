@@ -72,7 +72,8 @@ bool MC_VQE::initialize(const HeterogeneousMap &parameters) {
     tnqvmLog = parameters.get<bool>("tnqvm-log");
   }
 
-  // Control whether interference matrix is computed
+  // Controls whether interference matrix is computed
+  // (For testing purposes)
   if (parameters.keyExists<bool>("interference")) {
     doInterference = parameters.get<bool>("interference");
   }
@@ -108,7 +109,7 @@ const std::vector<std::string> MC_VQE::requiredParameters() const {
 void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
   // entangledHamiltonian stores the Hamiltonian matrix elements
-  // in the basis ofMC states
+  // in the basis of MC states
   Eigen::MatrixXd entangledHamiltonian(nStates, nStates);
   entangledHamiltonian.setZero();
 
@@ -151,11 +152,17 @@ void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
           logControl(kernel->toString(), 3);
 
           // Cleaned this up by calling VQE
+          if (tnqvmLog) {
+            xacc::set_verbose(true);
+          }
           auto vqe = xacc::getAlgorithm("vqe", {{"accelerator", accelerator},
                                                 {"observable", observable},
                                                 {"ansatz", kernel}});
           auto tmpBuffer = xacc::qalloc(buffer->size());
-          energy = vqe->execute(q, {})[0];
+          energy = vqe->execute(tmpBuffer, {})[0];
+          if (tnqvmLog) {
+            xacc::set_verbose(false);
+          }
 
           // Retrieve instructions for gradient, if a pointer of type
           // AlgorithmGradientStrategy is given
@@ -163,19 +170,12 @@ void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
             // Gradient instructions to be sent to the qpu
             gradFsToExec = gradientStrategy->getGradientExecutions(kernel, x);
-
             logControl("Number of instructions for energy calculation: " +
                            std::to_string(observable->nTerms()),
                        1);
             logControl("Number of instructions for gradient calculation: " +
                            std::to_string(gradFsToExec.size()),
                        1);
-          }
-
-          logControl(
-              "Printing instructions for state #" + std::to_string(state), 4);
-          if (tnqvmLog) {
-            xacc::set_verbose(true);
           }
 
           // gradient-based optimization
@@ -186,9 +186,12 @@ void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
             logControl(ss.str(), 1);
             ss.str(std::string());
 
+            if (tnqvmLog) {
+              xacc::set_verbose(true);
+            }
             // temp instance of AcceleratorBuffer
             auto tmpBuffer = xacc::qalloc(buffer->size());
-            // execute parametrized instructions with tmpBuffer
+            // execute parametrized instructions on tmpBuffer
             accelerator->execute(tmpBuffer, fsToExec);
             // children buffers one for each executed function
             auto buffers = tmpBuffer->getChildren();
@@ -197,7 +200,7 @@ void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
             }
 
             // update gradient vector
-            gradientStrategy->compute(dx, buffer);
+            gradientStrategy->compute(dx, buffers);
 
             // Because AlgorithmGradientStrategy methods take reference to both
             // x and dx we need to keep track of the gradient for each state
