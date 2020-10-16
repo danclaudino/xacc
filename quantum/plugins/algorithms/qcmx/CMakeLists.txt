@@ -1,25 +1,31 @@
-set(LIBRARY_NAME xacc-qpp)
+# *******************************************************************************
+# Copyright (c) 2019 UT-Battelle, LLC.
+# All rights reserved. This program and the accompanying materials
+# are made available under the terms of the Eclipse Public License v1.0
+# and Eclipse Distribution License v.10 which accompany this distribution.
+# The Eclipse Public License is available at http://www.eclipse.org/legal/epl-v10.html
+# and the Eclipse Distribution License is available at
+# https://eclipse.org/org/documents/edl-v10.php
+#
+# Contributors:
+#   Alexander J. McCaskey - initial API and implementation
+# *******************************************************************************/
+set(LIBRARY_NAME xacc-algorithm-qcmx)
 
-file(GLOB SRC
-          *.cpp
-          accelerator/*.cpp)
+file(GLOB SRC *.cpp)
 
 usfunctiongetresourcesource(TARGET ${LIBRARY_NAME} OUT SRC)
 usfunctiongeneratebundleinit(TARGET ${LIBRARY_NAME} OUT SRC)
 
 add_library(${LIBRARY_NAME} SHARED ${SRC})
 
-target_include_directories(${LIBRARY_NAME}
-                             PUBLIC .
-                                    ./accelerator
-                                    ./accelerator/src/include
-                                    ${CMAKE_SOURCE_DIR}/tpls/eigen)
-target_link_libraries(${LIBRARY_NAME}
-                        PUBLIC xacc
-                               xacc-quantum-gate
-                        )
+target_include_directories(
+  ${LIBRARY_NAME}
+  PUBLIC .)
 
-set(_bundle_name xacc_qpp)
+target_link_libraries(${LIBRARY_NAME} PUBLIC xacc CppMicroServices PRIVATE xacc-pauli)
+
+set(_bundle_name xacc_algorithm_qcmx)
 set_target_properties(${LIBRARY_NAME}
                       PROPERTIES COMPILE_DEFINITIONS
                                  US_BUNDLE_NAME=${_bundle_name}
@@ -33,12 +39,6 @@ usfunctionembedresources(TARGET
                          FILES
                          manifest.json)
 
-find_package(OpenMP)
-if(OpenMP_CXX_FOUND)
-  target_compile_definitions(${LIBRARY_NAME} PUBLIC WITH_OPENMP_)
-  target_link_libraries(${LIBRARY_NAME} PUBLIC OpenMP::OpenMP_CXX)
-endif()
-                         
 if(APPLE)
   set_target_properties(${LIBRARY_NAME}
                         PROPERTIES INSTALL_RPATH "@loader_path/../lib")
@@ -55,4 +55,3 @@ if(XACC_BUILD_TESTS)
 endif()
 
 install(TARGETS ${LIBRARY_NAME} DESTINATION ${CMAKE_INSTALL_PREFIX}/plugins)
-
