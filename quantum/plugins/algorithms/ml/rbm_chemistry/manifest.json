@@ -1,0 +1,6 @@
+{
+  "bundle.symbolic_name" : "xacc_algorithm_rbm_chemistry",
+  "bundle.activator" : true,
+  "bundle.name" : "XACC RBM Chemistry Algorithm",
+  "bundle.description" : ""
+}
