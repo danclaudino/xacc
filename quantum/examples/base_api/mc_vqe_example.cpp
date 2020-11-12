@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
 
   std::vector<std::string> arguments(argv + 1, argv + argc);
   int n_virt_qpus = 1, exatnLogLevel = 2, mcvqeLogLevel = 1, n_chromophores = 4,
-      exatnBufferSize = 2;
+      exatnBufferSize = 2, opt_maxiter = 1, n_states = 1;
   std::string acc = "tnqvm";
 
   for (int i = 0; i < arguments.size(); i++) {
@@ -27,6 +27,12 @@ int main(int argc, char **argv) {
     if (arguments[i] == "--exatn-buffer-size") {
       exatnBufferSize = std::stoi(arguments[i + 1]);
     }
+    if (arguments[i] == "--opt-maxiter") {
+      opt_maxiter = std::stoi(arguments[i + 1]);
+    }
+    if (arguments[i] == "--n-states") {
+      n_states = std::stoi(arguments[i + 1]);
+    }
     if (arguments[i] == "--verbose") {
       if (arguments[i + 1] == "true" || arguments[i + 1] == "1") {
         xacc::set_verbose(true);
@@ -41,6 +47,7 @@ int main(int argc, char **argv) {
 
   std::cout << "N chromophores " << n_chromophores << "\n";
   std::cout << "N virtual QPUs" << n_virt_qpus << "\n";
+  std::cout << "N MC states" << n_states << "\n";
   std::cout << "exatn log " << exatnLogLevel << "\n";
   std::cout << "mcvqe log " << mcvqeLogLevel << "\n";
   std::cout << "exatn buffer " << exatnBufferSize << "\n";  
@@ -199,7 +206,7 @@ Transition dipole moment: 1.5656,2.8158,-0.0976
   datafile << data;
   datafile.close();
   std::string path = "./datafile.txt";
-  auto optimizer = xacc::getOptimizer("nlopt", {{"nlopt-maxeval", 2}});
+  auto optimizer = xacc::getOptimizer("nlopt", {{"nlopt-maxeval", opt_maxiter}});
 
   // ExaTN visitor
   std::shared_ptr<xacc::Accelerator> accelerator;
@@ -221,11 +228,13 @@ Transition dipole moment: 1.5656,2.8158,-0.0976
   mc_vqe->initialize(
       {{"accelerator", accelerator},
        {"optimizer", optimizer},
+       {"interference", false}, {"n-states", n_states},
        {"data-path", path}, {"cyclic", true},
        {"log-level", mcvqeLogLevel}, {"tnqvm-log", true},
        {"nChromophores", n_chromophores}});
 
   auto q = xacc::qalloc(n_chromophores);
+  std::vector<double> x(n_chromophores*5);
   xacc::ScopeTimer timer("mpi_timing", false);
   mc_vqe->execute(q);
   auto run_time = timer.getDurationMs();
@@ -235,6 +244,8 @@ Transition dipole moment: 1.5656,2.8158,-0.0976
     std::cout << "Energy: "
               << q->getInformation("opt-average-energy").as<double>()
               << " Hartree\n";
+    std::cout << "Circuit depth: " << q->getInformation("circuit-depth").as<int>() << ".\n";
+    std::cout << "Total number of gates: " << q->getInformation("n-gates").as<int>() << ".\n";
     std::cout << "Runtime: " << run_time << " ms.\n";
   }
 

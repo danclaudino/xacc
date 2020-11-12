@@ -85,6 +85,12 @@ bool MC_VQE::initialize(const HeterogeneousMap &parameters) {
   // and angles for CIS state preparation
   preProcessing();
 
+  // Number of states to compute (< nChromophores + 1)
+  // (For testing purposes)
+  if (parameters.keyExists<int>("n-states")) {
+    nStates = parameters.get<int>("n-states");
+  } 
+
   // Instantiate gradient class if a valid one is provided
   if (parameters.stringExists("gradient-strategy")) {
     gradientStrategy = xacc::getService<AlgorithmGradientStrategy>(
@@ -120,6 +126,9 @@ void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   // Only store the diagonal when it lowers the average energy
   Eigen::VectorXd diagonal(nStates);
 
+  // store circuit depth and pass to buffer
+  int depth, nGates;
+
   logControl("Starting the MC-VQE optimization", 1);
   auto startOpt = std::chrono::high_resolution_clock::now();
 
@@ -147,6 +156,9 @@ void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
           for (auto &inst : entangler->getInstructions()) {
             kernel->addInstruction(inst);
           }
+
+	  depth = kernel->depth();
+	  nGates = kernel->nInstructions();
 
           logControl("Printing circuit for state #" + std::to_string(state), 3);
           logControl(kernel->toString(), 3);
@@ -251,6 +263,8 @@ void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   // run optimization
   auto result = optimizer->optimize(f);
   buffer->addExtraInfo("opt-average-energy", ExtraInfo(result.first));
+  buffer->addExtraInfo("circuit-depth", ExtraInfo(depth));
+  buffer->addExtraInfo("n-gates", ExtraInfo(nGates));
   buffer->addExtraInfo("opt-params", ExtraInfo(result.second));
   auto endOpt = std::chrono::high_resolution_clock::now();
   auto totalOpt = std::chrono::duration_cast<std::chrono::duration<double>>(
@@ -261,6 +275,7 @@ void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
              1);
   logControl("MC-VQE optimization complete", 1);
 
+  if(doInterference) {
   // now construct interference states and observe Hamiltonian
   auto startMC = std::chrono::high_resolution_clock::now();
   auto optimizedEntangler = result.second;
@@ -357,7 +372,7 @@ void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
           .count();
   logControl("MC-VQE simulation finished [" + std::to_string(totalTime) + " s]",
              1);
-
+  }
   return;
 }
 
@@ -371,6 +386,9 @@ MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer,
   // all CIS states share the same entangler gates
   auto entangler = entanglerCircuit();
 
+  // store circuit depth and pass to buffer
+  int depth, nGates;
+
   // MC-VQE minimizes the average energy over all MC states
   double averageEnergy = 0.0;
   for (int state = 0; state < nStates; state++) { // loop over states
@@ -382,6 +400,9 @@ MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer,
     for (auto &inst : entangler->getInstructions()) {
       kernel->addInstruction(inst); // append entangler gates
     }
+  
+    depth = kernel->depth();
+    nGates = kernel->nInstructions();
 
     logControl("Printing circuit for state #" + std::to_string(state), 3);
     logControl(kernel->toString(), 3);
@@ -408,6 +429,10 @@ MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer,
                2);
   }
 
+  buffer->addExtraInfo("opt-average-energy", averageEnergy);
+  buffer->addExtraInfo("circuit-depth", ExtraInfo(depth));
+  buffer->addExtraInfo("n-gates", ExtraInfo(nGates));
+  if(doInterference) {
   // now construct interference states and observe Hamiltonian
   auto startMC = std::chrono::high_resolution_clock::now();
   logControl(
@@ -507,6 +532,9 @@ MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer,
                                MC_VQE_Energies.data() + MC_VQE_Energies.size());
 
   return spectrum;
+  } else {
+  return {};
+  }
 }
 
 std::shared_ptr<CompositeInstruction>
