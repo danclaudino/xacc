@@ -38,14 +38,11 @@ protected:
   int _maxIter = 50; // max # of ADAPT cycles // # of QAOA layers
   double _adaptThreshold = 1.0e-2; // gradient norm threshold
   double _printThreshold = 1.0e-10; // threshold to print commutator
-  bool _printOps = false; // set to true to print operators at every iteration
   int _nElectrons; // # of electrons, used for VQE
 
-  std::vector<int> checkpointOps; // indices of operators to construct initial ansatz
-  std::vector<double> checkpointParams; // initial parameters for initial ansatz
   // name of class to compute gradient for optimization
   // defaults to parameter shift
-  std::string gradStrategyName = "parameter-shift-gradient"; 
+  std::string gradStrategyName = "parameter-shift"; 
 
 public:
 
