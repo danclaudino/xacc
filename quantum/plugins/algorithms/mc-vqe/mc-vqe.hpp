@@ -17,6 +17,8 @@
 #include "xacc_service.hpp"
 #include <Eigen/Dense>
 #include <chrono>
+#include <memory>
+#include <vector>
 #include "AlgorithmGradientStrategy.hpp"
 
 namespace xacc {
@@ -31,28 +33,28 @@ protected:
   // MC-VQE variables
 
   // number of chromophores
-  int nChromophores;      
-  // true if the molecular system is cyclic       
-  bool isCyclic;            
-  // if false, will not compute interference matrix     
+  int nChromophores;
+  // true if the molecular system is cyclic
+  bool isCyclic;
+  // if false, will not compute interference matrix
   bool doInterference = true;
   // state preparation angles
-  Eigen::MatrixXd CISGateAngles; 
+  Eigen::MatrixXd CISGateAngles, CISEigenstates;
   // AIEM Hamiltonian
   std::shared_ptr<Observable> observable;
   // # number of CIS states = nChromophores + 1
-  int nStates;            
+  int nStates;
   // # of parameters in a single entangler
-  // after merging adjacent Ry gates        
-  const int NPARAMSENTANGLER = 4; 
+  // after merging adjacent Ry gates
+  const int NPARAMSENTANGLER = 4;
   // angstrom to bohr
-  const double ANGSTROM2BOHR = 1.8897161646320724; 
-   // D to a.u.
+  const double ANGSTROM2BOHR = 1.8897161646320724;
+  // D to a.u.
   const double DEBYE2AU = 0.393430307;
-  // path to file with quantum chemistry data            
-  std::string dataPath; 
+  // path to file with quantum chemistry data
+  std::string dataPath;
   // start time of simulation
-  std::chrono::system_clock::time_point start; 
+  std::chrono::system_clock::time_point start;
 
   // constructs CIS state preparation circiuit
   std::shared_ptr<CompositeInstruction>
@@ -65,10 +67,42 @@ protected:
   // and the gates for state preparation
   void preProcessing();
 
+  Eigen::MatrixXd
+  statePreparationAngles(const Eigen::MatrixXd CoefficientMatrix);
+
+  double vqeWrapper(const std::shared_ptr<Observable> observable,
+                    const std::shared_ptr<CompositeInstruction> kernel,
+                    const std::vector<double> x) const;
+
   // controls the level of printing
   int logLevel = 1;
   bool tnqvmLog = false;
   void logControl(const std::string message, const int level) const;
+
+  // response/gradient
+  std::vector<Eigen::VectorXd>
+  getUnrelaxed1PDM(const std::string pauliTerm,
+                   const std::shared_ptr<CompositeInstruction> entangler,
+                   const Eigen::MatrixXd subspaceRotation,
+                   const std::vector<double> x);
+
+  std::vector<Eigen::MatrixXd>
+  getUnrelaxed2PDM(const std::string pauliTerm,
+                   const std::shared_ptr<CompositeInstruction> entangler,
+                   const Eigen::MatrixXd subspaceRotation,
+                   const std::vector<double> x);
+
+  Eigen::VectorXd
+  getVQE1PDM(const std::string pauliTerm,
+             const std::shared_ptr<CompositeInstruction> entangler,
+             const Eigen::MatrixXd subspaceRotation,
+             const std::vector<double> x);
+
+  Eigen::MatrixXd
+  getVQE2PDM(const std::string pauliTerm,
+             const std::shared_ptr<CompositeInstruction> entangler,
+             const Eigen::MatrixXd subspaceRotation,
+             const std::vector<double> x);
 
 public:
   bool initialize(const HeterogeneousMap &parameters) override;

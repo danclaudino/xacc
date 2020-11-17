@@ -12,6 +12,7 @@
  *******************************************************************************/
 #include "mc-vqe.hpp"
 
+#include "CompositeInstruction.hpp"
 #include "Observable.hpp"
 #include "PauliOperator.hpp"
 #include "xacc.hpp"
@@ -167,11 +168,7 @@ void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
           if (tnqvmLog) {
             xacc::set_verbose(true);
           }
-          auto vqe = xacc::getAlgorithm("vqe", {{"accelerator", accelerator},
-                                                {"observable", observable},
-                                                {"ansatz", kernel}});
-          auto tmpBuffer = xacc::qalloc(buffer->size());
-          auto energy = vqe->execute(tmpBuffer, x)[0];
+          auto energy = vqeWrapper(observable, kernel, x);
           if (tnqvmLog) {
             xacc::set_verbose(false);
           }
@@ -297,14 +294,11 @@ void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       // vqe call to compute the expectation value of the AEIM Hamiltonian
       // in the plusInterferenceCircuit with optimal entangler parameters
       // It does NOT perform any optimization
-      auto plus_vqe =
-          xacc::getAlgorithm("vqe", {{"observable", observable},
-                                     {"accelerator", accelerator},
-                                     {"ansatz", plusInterferenceCircuit}});
       if (tnqvmLog) {
         xacc::set_verbose(true);
       }
-      auto plusTerm = plus_vqe->execute(buffer, optimizedEntangler)[0];
+      auto plusTerm =
+          vqeWrapper(observable, plusInterferenceCircuit, optimizedEntangler);
       if (tnqvmLog) {
         xacc::set_verbose(false);
       }
@@ -321,14 +315,11 @@ void MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       // vqe call to compute the expectation value of the AEIM Hamiltonian
       // in the plusInterferenceCircuit with optimal entangler parameters
       // It does NOT perform any optimization
-      auto minus_vqe =
-          xacc::getAlgorithm("vqe", {{"observable", observable},
-                                     {"accelerator", accelerator},
-                                     {"ansatz", minusInterferenceCircuit}});
       if (tnqvmLog) {
         xacc::set_verbose(true);
       }
-      auto minusTerm = minus_vqe->execute(buffer, optimizedEntangler)[0];
+      auto minusTerm =
+          vqeWrapper(observable, minusInterferenceCircuit, optimizedEntangler);
       if (tnqvmLog) {
         xacc::set_verbose(false);
       }
@@ -412,11 +403,7 @@ MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer,
     if (tnqvmLog) {
       xacc::set_verbose(true);
     }
-    auto vqe = xacc::getAlgorithm("vqe", {{"accelerator", accelerator},
-                                          {"observable", observable},
-                                          {"ansatz", kernel}});
-    auto tmpBuffer = xacc::qalloc(buffer->size());
-    auto energy = vqe->execute(tmpBuffer, x)[0];
+    auto energy = vqeWrapper(observable, kernel, x);
     if (tnqvmLog) {
       xacc::set_verbose(false);
     }
@@ -453,14 +440,10 @@ MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer,
       // vqe call to compute the expectation value of the AEIM Hamiltonian
       // in the plusInterferenceCircuit with optimal entangler parameters
       // It does NOT perform any optimization
-      auto plus_vqe =
-          xacc::getAlgorithm("vqe", {{"observable", observable},
-                                     {"accelerator", accelerator},
-                                     {"ansatz", plusInterferenceCircuit}});
       if (tnqvmLog) {
         xacc::set_verbose(true);
       }
-      auto plusTerm = plus_vqe->execute(buffer, x)[0];
+      auto plusTerm = vqeWrapper(observable, plusInterferenceCircuit, x);
       if (tnqvmLog) {
         xacc::set_verbose(false);
       }
@@ -477,14 +460,10 @@ MC_VQE::execute(const std::shared_ptr<AcceleratorBuffer> buffer,
       // vqe call to compute the expectation value of the AEIM Hamiltonian
       // in the plusInterferenceCircuit with optimal entangler parameters
       // It does NOT perform any optimization
-      auto minus_vqe =
-          xacc::getAlgorithm("vqe", {{"observable", observable},
-                                     {"accelerator", accelerator},
-                                     {"ansatz", minusInterferenceCircuit}});
       if (tnqvmLog) {
         xacc::set_verbose(true);
       }
-      auto minusTerm = minus_vqe->execute(buffer, x)[0];
+      auto minusTerm = vqeWrapper(observable, minusInterferenceCircuit, x);
       if (tnqvmLog) {
         xacc::set_verbose(false);
       }
@@ -913,26 +892,36 @@ void MC_VQE::preProcessing() {
   // Diagonalizing the CISMatrix
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> EigenSolver(CISMatrix);
   auto CISEnergies = EigenSolver.eigenvalues();
-  auto CISStates = EigenSolver.eigenvectors();
+  CISEigenstates = EigenSolver.eigenvectors();
 
+  CISGateAngles = statePreparationAngles(CISEigenstates);
+
+  // end of preProcessing
+  return;
+}
+
+Eigen::MatrixXd
+MC_VQE::statePreparationAngles(const Eigen::MatrixXd CoefficientMatrix) {
+
+  Eigen::MatrixXd gateAngles = Eigen::MatrixXd::Zero(nChromophores, nStates);
   // Computing the CIS state preparation angles (Ref3 Eqs. 60-61)
   for (int state = 0; state < nStates; state++) {
     // std::cout << CISEnergies[state] - CISEnergies[0] << "\n";
     for (int angle = 0; angle < nChromophores; angle++) {
 
-      double partialCoeffNorm =
-          CISStates.col(state).segment(angle, nChromophores - angle + 1).norm();
-      CISGateAngles(angle, state) =
-          std::acos(CISStates(angle, state) / partialCoeffNorm);
+      double partialCoeffNorm = CoefficientMatrix.col(state)
+                                    .segment(angle, nChromophores - angle + 1)
+                                    .norm();
+      gateAngles(angle, state) =
+          std::acos(CoefficientMatrix(angle, state) / partialCoeffNorm);
     }
 
-    if (CISStates(Eigen::last, state) < 0.0) {
-      CISGateAngles(nChromophores - 1, state) *= -1.0;
+    if (CoefficientMatrix(Eigen::last, state) < 0.0) {
+      gateAngles(nChromophores - 1, state) *= -1.0;
     }
   }
 
-  // end of preProcessing
-  return;
+  return gateAngles;
 }
 
 void MC_VQE::logControl(const std::string message, const int level) const {
@@ -947,6 +936,18 @@ void MC_VQE::logControl(const std::string message, const int level) const {
     xacc::set_verbose(false);
   }
   return;
+}
+
+// This is just a wrapper to compute <H^n> with VQE::execute(q, {})
+double MC_VQE::vqeWrapper(const std::shared_ptr<Observable> observable,
+                          const std::shared_ptr<CompositeInstruction> kernel,
+                          const std::vector<double> x) const {
+
+  auto q = xacc::qalloc(nChromophores);
+  auto vqe = xacc::getAlgorithm(
+      "vqe",
+      {{"observable", observable}, {"accelerator", accelerator}, {"ansatz", kernel}});
+  return vqe->execute(q, x)[0];
 }
 
 } // namespace algorithm
