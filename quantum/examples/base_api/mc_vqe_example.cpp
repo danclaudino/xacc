@@ -2,6 +2,7 @@
 #include "Utils.hpp"
 #include <fstream>
 #include <sstream>
+#include <random>
 
 int main(int argc, char **argv) {
   xacc::Initialize(argc, argv);
@@ -51,7 +52,23 @@ int main(int argc, char **argv) {
   //xacc::logToFile(true);
   xacc::setLoggingLevel(exatnLogLevel);
 
-  const char *data = R"foo(0
+  // pseudo random number generator
+  auto rand = [](){
+
+    std::random_device rnd_device;
+    std::mt19937 mersenne_engine{rnd_device()}; // Generates random integers
+    double l_range = -1.0, r_range = 0.0;
+    std::uniform_real_distribution<double> dist{l_range, r_range};
+    auto gen = [&dist, &mersenne_engine]() { return dist(mersenne_engine); };
+    std::vector<double> vec(1);
+    std::generate(vec.begin(), vec.end(), gen);
+    return vec[0];
+
+  };
+
+  std::ofstream datafile("datafile.txt", std::ofstream::out);
+  if (n_chromophores <= 18) {
+    const char *data = R"foo(0
 Ground state energy: -2263.263771754
 Excited state energy: -2263.19429617
 Center of mass: -2.820215,16.49446,28.162545
@@ -196,9 +213,28 @@ Excited state dipole moment: -2.4219,2.9381,1.1147
 Transition dipole moment: 1.5656,2.8158,-0.0976
 )foo";
 
-  std::ofstream datafile("datafile.txt", std::ofstream::out);
   datafile << data;
   datafile.close();
+
+  } else {
+
+    std::stringstream ss;
+    for (int i = 0; i < n_chromophores; i++) {
+       ss << i << "\n";
+       ss << "Ground state energy: " << rand() << "\n";
+       ss << "Excited state energy: " << rand() << "\n";
+       ss << "Center of mass: " << rand() << "," << rand() << "," << rand() << "\n";
+       ss << "Ground state dipole moment: " << rand() << "," << rand() << "," << rand() << "\n";
+       ss << "Excited state dipole moment: " << rand() << "," << rand() << "," << rand() << "\n";
+       ss << "Transition dipole moment: " << rand() << "," << rand() << "," << rand() << "\n";
+       ss << "\n";
+    }
+
+  datafile << ss.str();
+  datafile.close();
+  }
+
+  
   std::string path = "./datafile.txt";
   auto optimizer = xacc::getOptimizer("nlopt", {{"nlopt-maxeval", opt_maxiter}});
 
@@ -243,7 +279,6 @@ for(int i = 0; i < n_cycles; i++) {
     std::cout << "Runtime: " << run_time << " ms.\n";
   }
 }
-
   ///
   xacc::Finalize();
 
