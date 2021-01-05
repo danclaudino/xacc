@@ -1,0 +1,6 @@
+{
+  "bundle.symbolic_name" : "xacc_observable_grouping_qwc",
+  "bundle.activator" : true,
+  "bundle.name" : "XACC Qubit-Wise Commutativity ObservableGrouping",
+  "bundle.description" : ""
+}
