@@ -2,7 +2,7 @@ set (PACKAGE_NAME "Quantum Observable Transforms")
 set (LIBRARY_NAME xacc-observable-transforms)
 
 file (GLOB_RECURSE HEADERS *.hpp)
-file (GLOB SRC *.cpp)
+file (GLOB SRC *.cpp JordanWigner/*.cpp BravyiKitaev/*.cpp)
 
 # Set up dependencies to resources to track changes
 usFunctionGetResourceSource(TARGET ${LIBRARY_NAME} OUT SRC)
@@ -13,6 +13,8 @@ add_library(${LIBRARY_NAME} SHARED ${SRC})
 target_include_directories(${LIBRARY_NAME}
                             PUBLIC
                             .
+                            ./JordanWigner
+                            ./BravyiKitaev
                             ${CMAKE_CURRENT_SOURCE_DIR}
                             ${CMAKE_SOURCE_DIR}/quantum/gate/observable/fermion
                             ${CMAKE_SOURCE_DIR}/quantum/gate/observable/pauli
