@@ -1472,6 +1472,9 @@ Optionally, users can provide these parameters:
 |    adapt-threshold     | Stops ADAPT when norm of gradient vector falls below this value | double                               |
 |                        | (Default 1.0e-2)                                                |                                      |
 +------------------------+-----------------------------------------------------------------+--------------------------------------+
+| measurement-threshold  | Controls which commutator terms are measured                    | double                               |
+|                        | (Default 0)                                                     |                                      |
++------------------------+-----------------------------------------------------------------+--------------------------------------+
 
 ADAPT-VQE
 

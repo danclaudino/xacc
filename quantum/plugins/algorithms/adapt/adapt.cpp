@@ -9,14 +9,10 @@
  *
  * Contributors:
  *   Daniel Claudino - initial API and implementation
- *******************************************************************************/
+ ******************************************************************************/
 
 #include "adapt.hpp"
-
-#include "AcceleratorBuffer.hpp"
-#include "CompositeInstruction.hpp"
 #include "FermionOperator.hpp"
-#include "Observable.hpp"
 #include "ObservableTransform.hpp"
 #include "xacc.hpp"
 #include "xacc_service.hpp"
@@ -133,6 +129,21 @@ bool ADAPT::initialize(const HeterogeneousMap &parameters) {
     observable = std::dynamic_pointer_cast<Observable>(pauliObservable);
   }
 
+  if (parameters.keyExists<std::vector<double>>("initial-parameters")) {
+    initialParams = parameters.get<std::vector<double>>("initial-parameters");
+  }
+
+  if (parameters.keyExists<std::vector<int>>("initial-operators")) {
+    initialOps = parameters.get<std::vector<int>>("initial-operators");
+  }
+
+  if (parameters.keyExists<double>("measurement-threshold")) {
+    _measurementThreshold = parameters.get<double>("measurement-threshold");
+    xacc::info("Ignoring measurements with coefficient below = " + std::to_string(_measurementThreshold));
+  }
+
+  _parameters = parameters;
+
   return true;
 }
 
@@ -142,18 +153,41 @@ const std::vector<std::string> ADAPT::requiredParameters() const {
 
 void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
+  // stream to direct printing
   std::stringstream ss;
+  // ansatz parameters
+  std::vector<double> x;
+  // ansatz operator indices according to the pool numbering
+  std::vector<int> ansatzOps;
 
   // Instantiate adaptive circuit and add instructions from initial state
   // initial state for chemistry VQE is usually HF
   // initial state for QAOA is all |+>
-  auto ansatzRegistry = xacc::getIRProvider("quantum");
-  auto ansatzInstructions = ansatzRegistry->createComposite("ansatzCircuit");
+  auto provider = xacc::getIRProvider("quantum");
+  auto ansatz = provider->createComposite("ansatz");
 
+  // Generate operators in the pool
+  auto operators = pool->generate(buffer->size());
+
+  // construct initial state
   if (initialState) {
 
     for (auto &inst : initialState->getInstructions()) {
-      ansatzInstructions->addInstruction(inst);
+      ansatz->addInstruction(inst);
+    }
+
+  } else if (!initialParams.empty() && !initialOps.empty()) {
+
+    xacc::info("Starting from provided ansatz operators and parameters");
+    x = initialParams;
+    ansatzOps = initialOps;
+
+    for (int i = 0; i < ansatzOps.size(); i++) {
+      ansatz->addVariable("x" + std::to_string(i));
+      for (auto &inst :
+           pool->getOperatorInstructions(ansatzOps[i], i)->getInstructions()) {
+        ansatz->addInstruction(inst);
+      }
     }
 
   } else {
@@ -163,13 +197,9 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       std::size_t j;
       for (int i = 0; i < _nElectrons / 2; i++) {
         j = (std::size_t)i;
-        auto alphaXGate =
-            ansatzRegistry->createInstruction("X", std::vector<std::size_t>{j});
-        ansatzInstructions->addInstruction(alphaXGate);
+        ansatz->addInstruction(provider->createInstruction("X", {j}));
         j = (std::size_t)(i + buffer->size() / 2);
-        auto betaXGate =
-            ansatzRegistry->createInstruction("X", std::vector<std::size_t>{j});
-        ansatzInstructions->addInstruction(betaXGate);
+        ansatz->addInstruction(provider->createInstruction("X", {j}));
       }
     }
 
@@ -177,16 +207,10 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       std::size_t j;
       for (int i = 0; i < buffer->size(); i++) {
         j = (std::size_t)i;
-        auto H =
-            ansatzRegistry->createInstruction("H", std::vector<std::size_t>{j});
-        ansatzInstructions->addInstruction(H);
+        ansatz->addInstruction(provider->createInstruction("H", {j}));
       }
     }
   }
-
-  // Generate operators in the pool
-  auto operators = pool->generate(buffer->size());
-  std::vector<int> ansatzOps;
 
   // Vector of commutators, need to compute them only once
   std::vector<std::shared_ptr<Observable>> commutators;
@@ -197,9 +221,7 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       auto comm = observable->commutator(op);
       auto &tmp = *std::dynamic_pointer_cast<PauliOperator>(comm);
       tmp = tmp * i;
-      auto ptr = std::dynamic_pointer_cast<Observable>(
-          std::make_shared<PauliOperator>(tmp));
-      commutators.push_back(ptr);
+      commutators.push_back(std::make_shared<PauliOperator>(tmp));
     }
 
   } else {
@@ -212,16 +234,23 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   xacc::info("Operator pool: " + pool->name());
   xacc::info("Number of operators in the pool: " +
              std::to_string(operators.size()));
+
+  // energy from the previous iteration
   double oldEnergy = 0.0;
-  std::vector<double> x; // these are the variational parameters
+
+  // number of circuit implementations
+  // lower bound to the number of measurements
+  // # measurements = nImplCircuits * shots;
+  int nImplCircuits = 0;
 
   // start ADAPT loop
-  for (int iter = 0; iter < _maxIter; iter++) {
+  for (int iter = x.size(); iter < _maxIter; iter++) {
 
     xacc::info("Iteration: " + std::to_string(iter + 1));
     xacc::info("Computing [H, A]");
-    xacc::info("Printing commutators with absolute value above " +
-               std::to_string(_printThreshold));
+    ss << "Printing commutators with absolute value above "  << _printThreshold;
+    xacc::info(ss.str());
+    ss.str(std::string());
 
     if (subAlgo == "QAOA") {
 
@@ -230,48 +259,38 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
       // Create instruction for new operator
       costHamiltonianGates->expand(
-          {std::make_pair("pauli", observable->toString()),
-           std::make_pair(
-               "param_id",
-               "x" + std::to_string(ansatzInstructions->nVariables()))});
+          {{"pauli", observable->toString()},
+           {"param_id", "x" + std::to_string(ansatz->nVariables())}});
 
-      ansatzInstructions->addVariable(
-          "x" + std::to_string(ansatzInstructions->nVariables()));
+      ansatz->addVariable("x" + std::to_string(ansatz->nVariables()));
       for (auto &inst : costHamiltonianGates->getInstructions()) {
-        ansatzInstructions->addInstruction(inst);
+        ansatz->addInstruction(inst);
       }
       x.insert(x.begin(), 0.01);
     }
 
     int maxCommutatorIdx = 0;
-    double maxCommutator = 0.0;
-    double gradientNorm = 0.0;
+    double maxCommutator = 0.0, gradientNorm = 0.0;
 
-    // Loop over non-vanishing commutators and select the one with largest
-    // magnitude
-    for (int operatorIdx = 0; operatorIdx < commutators.size(); operatorIdx++) {
+    // Loop over non-vanishing commutators
+    // select the one with largest magnitude
+    for (int opIdx = 0; opIdx < commutators.size(); opIdx++) {
 
       // only compute commutators if they aren't zero
       int nTermsCommutator =
-          std::dynamic_pointer_cast<PauliOperator>(commutators[operatorIdx])
+          std::dynamic_pointer_cast<PauliOperator>(commutators[opIdx])
               ->getTerms()
               .size();
       if (nTermsCommutator != 0) {
-
-        // Print number of instructions for computing <observable>
-        xacc::info("Number of instructions for commutator calculation: " +
-                   std::to_string(nTermsCommutator));
         // observe the commutators with the updated circuit ansatz
-        auto grad_algo = xacc::getAlgorithm(
-            subAlgo, {std::make_pair("observable", commutators[operatorIdx]),
-                      std::make_pair("optimizer", optimizer),
-                      std::make_pair("accelerator", accelerator),
-                      std::make_pair("ansatz", ansatzInstructions)});
-        auto tmp_buffer = xacc::qalloc(buffer->size());
-        auto commutatorValue = std::real(grad_algo->execute(tmp_buffer, x)[0]);
+        auto commutatorValue =
+            measureOperator(commutators[opIdx], ansatz, x, buffer->size());
 
         if (abs(commutatorValue) > _printThreshold) {
-          ss << std::setprecision(12) << "[H," << operatorIdx
+          // Print number of instructions for computing <observable>
+          xacc::info("Number of instructions for commutator calculation: " +
+                     std::to_string(nTermsCommutator));
+          ss << std::setprecision(12) << "[H," << opIdx
              << "] = " << commutatorValue;
           xacc::info(ss.str());
           ss.str(std::string());
@@ -279,12 +298,19 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
         // update maxCommutator
         if (abs(commutatorValue) > abs(maxCommutator)) {
-          maxCommutatorIdx = operatorIdx;
+          maxCommutatorIdx = opIdx;
           maxCommutator = commutatorValue;
         }
 
+        // update gradient norm
         gradientNorm += commutatorValue * commutatorValue;
+
+        // increment nImplCircuits
+        nImplCircuits += nTermsCommutator;
       }
+
+      // clear cachedMeasurements
+      cachedMeasurements.clear();
     }
 
     ss << std::setprecision(12) << "Max gradient component: [H, "
@@ -302,24 +328,6 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
       xacc::info("ADAPT-" + subAlgo + " converged in " + std::to_string(iter) +
                  " iterations.");
-      ss << std::setprecision(12) << "ADAPT-" << subAlgo
-         << " energy: " << oldEnergy << " a.u.";
-      xacc::info(ss.str());
-      ss.str(std::string());
-
-      ss << "Optimal parameters: ";
-      for (auto param : x) {
-        ss << std::setprecision(12) << param << " ";
-      }
-      xacc::info(ss.str());
-      ss.str(std::string());
-
-      xacc::info("Final ADAPT-" + subAlgo + " circuit\n" +
-                 ansatzInstructions->toString());
-
-      // Add the ansatz to the compilation database for later retrieval
-      xacc::appendCompiled(ansatzInstructions, true);
-      buffer->addExtraInfo("final-ansatz", ExtraInfo(ansatzInstructions->name()));
       return;
 
     } else if (iter < _maxIter) { // Add operator and reoptimize
@@ -330,70 +338,52 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       ansatzOps.push_back(maxCommutatorIdx);
 
       // Instruction service for the operator to be added to the ansatz
-      auto maxCommutatorGate = pool->getOperatorInstructions(
-          maxCommutatorIdx, ansatzInstructions->nVariables());
+      auto maxCommutatorGate =
+          pool->getOperatorInstructions(maxCommutatorIdx, ansatz->nVariables());
 
       // Label for new variable and add it to the circuit
-      ansatzInstructions->addVariable(
-          "x" + std::to_string(ansatzInstructions->nVariables()));
+      ansatz->addVariable("x" + std::to_string(ansatz->nVariables()));
 
       // Append new instructions to current circuit
       for (auto &inst : maxCommutatorGate->getInstructions()) {
-        ansatzInstructions->addInstruction(inst);
+        ansatz->addInstruction(inst);
       }
 
-      // Convergence is improved if passing initial parameters to optimizer
-      // so we create a new instance of Optimizer with them
-      // insert 0.0 for VQE and pi/2 for QAOA
+      // update vector of parameters
+      double param;
+      if (subAlgo == "vqe") {
+        param = newParameter(operators[maxCommutatorIdx], ansatz, x, oldEnergy);
+        x.insert(x.begin(), param);
+        nImplCircuits += 2 * observable->getNonIdentitySubTerms().size();
+      }
+      if (subAlgo == "QAOA") {
+        x.insert(x.begin(), xacc::constants::pi / 2.0);
+      }
+      optimizer->appendOption("initial-parameters", x);
 
       // Instantiate gradient class
       std::shared_ptr<AlgorithmGradientStrategy> gradientStrategy;
-      std::shared_ptr<Optimizer> newOptimizer;
-      if (!gradStrategyName.empty() && subAlgo == "vqe" &&
-          optimizer->isGradientBased()) {
-
+      if (!gradStrategyName.empty() && optimizer->isGradientBased()) {
         gradientStrategy =
             xacc::getService<AlgorithmGradientStrategy>(gradStrategyName);
-        gradientStrategy->initialize(
-            {std::make_pair("observable", observable),
-             std::make_pair("commutator", commutators[maxCommutatorIdx])});
-        x.insert(x.begin(), 0.0);
-        newOptimizer = xacc::getOptimizer(
-            optimizer->name(), {std::make_pair(optimizer->name() + "-optimizer",
-                                               optimizer->get_algorithm()),
-                                std::make_pair("initial-parameters", x)});
-
-      } else if (!gradStrategyName.empty() && subAlgo == "QAOA" &&
-                 optimizer->isGradientBased()) {
-
-        gradientStrategy =
-            xacc::getService<AlgorithmGradientStrategy>(gradStrategyName);
-        gradientStrategy->initialize(
-            {std::make_pair("observable", observable)});
-        x.insert(x.begin(), xacc::constants::pi / 2.0);
-        newOptimizer = xacc::getOptimizer(
-            optimizer->name(), {std::make_pair(optimizer->name() + "-optimizer",
-                                               optimizer->get_algorithm()),
-                                std::make_pair("initial-parameters", x)});
-
-      } else {
-        gradientStrategy = nullptr;
-        newOptimizer = xacc::getOptimizer(
-            optimizer->name(), {std::make_pair(optimizer->name() + "-optimizer",
-                                               optimizer->get_algorithm())});
+        gradientStrategy->initialize({{"observable", observable}});
       }
 
       // Start subAlgo optimization
-      auto sub_opt = xacc::getAlgorithm(
-          subAlgo, {std::make_pair("observable", observable),
-                    std::make_pair("optimizer", newOptimizer),
-                    std::make_pair("accelerator", accelerator),
-                    std::make_pair("gradient_strategy", gradientStrategy),
-                    std::make_pair("ansatz", ansatzInstructions)});
-      sub_opt->execute(buffer);
+      _parameters.insert("ansatz", ansatz);
+      _parameters.insert("observable", observable);
+      auto sub_opt = xacc::getAlgorithm(subAlgo, _parameters);
 
-      auto newEnergy = (*buffer)["opt-val"].as<double>();
-      x = (*buffer)["opt-params"].as<std::vector<double>>();
+      // if this is the first iteration, param above is already optimal
+      double newEnergy;
+      if (iter == 0) {
+        newEnergy = sub_opt->execute(buffer, {param})[0];
+      } else {
+        sub_opt->execute(buffer);
+        newEnergy = (*buffer)["opt-val"].as<double>();
+        x = (*buffer)["opt-params"].as<std::vector<double>>();
+      }
+      nImplCircuits += observable->getNonIdentitySubTerms().size();
       oldEnergy = newEnergy;
 
       ss << std::setprecision(12) << "Energy at ADAPT iteration " << iter + 1
@@ -416,18 +406,32 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       xacc::info(ss.str());
       ss.str(std::string());
 
-      if (_printOps) {
-        xacc::info("Printing operators at ADAPT iteration " +
-                   std::to_string(iter + 1));
-        for (auto op : ansatzOps) {
-          xacc::info("Operator index: " + std::to_string(op));
-          xacc::info(pool->operatorString(op));
-        }
-      }
+      ss << "Circuit depth at ADAPT iteration " << std::to_string(iter + 1)
+         << ": " << std::to_string(ansatz->depth());
+      xacc::info(ss.str());
+      ss.str(std::string());
 
+      ss << "Total number of gates at ADAPT iteration "
+         << std::to_string(iter + 1) << ": "
+         << std::to_string(ansatz->nInstructions());
+      xacc::info(ss.str());
+      ss.str(std::string());
+
+      ss << "Total number of implemented circuits at ADAPT iteration "
+         << std::to_string(iter + 1) << ": " << std::to_string(nImplCircuits);
+      xacc::info(ss.str());
+      ss.str(std::string());
+
+      // persisting XASM circuit string to the buffer
+      auto xasm = xacc::getCompiler("xasm");
+      auto xasmCode = xasm->translate(ansatz->operator()(x));
+
+      // persisted relevant info to the buffer
       buffer->addExtraInfo("opt-val", ExtraInfo(oldEnergy));
       buffer->addExtraInfo("opt-params", ExtraInfo(x));
       buffer->addExtraInfo("opt-ansatz", ExtraInfo(ansatzOps));
+      buffer->addExtraInfo("n-implemented-circuits", ExtraInfo(nImplCircuits));
+      buffer->addExtraInfo("opt-circuit", ExtraInfo(xasmCode));
 
     } else {
       xacc::info("ADAPT-" + subAlgo + " did not converge in " +
@@ -435,6 +439,99 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       return;
     }
   }
+}
+
+// initializes new parameter from partial tomography
+// where all previous parameters are frozen
+// much better than starting from 0
+double ADAPT::newParameter(const std::shared_ptr<Observable> op,
+                           const std::shared_ptr<CompositeInstruction> kernel,
+                           const std::vector<double> &x,
+                           double zeroExpValue) const {
+
+  // First we need to get the coefficient for the operator
+  auto terms = op->getSubTerms();
+  auto term = std::dynamic_pointer_cast<PauliOperator>(terms[0])
+                  ->getTerms()
+                  .begin()
+                  ->second;
+  double coeff;
+  if (std::fabs(std::get<0>(term)) == 1.0) {
+    coeff = 0.5;
+  } else {
+    coeff = 2.0 * std::fabs(std::get<0>(term));
+  }
+
+  // now we compute the expectation value for different angles
+  // and get the tomography coefficients
+  auto vqe = xacc::getAlgorithm("vqe", {{"observable", observable},
+                                        {"accelerator", accelerator},
+                                        {"ansatz", kernel}});
+
+  std::vector<double> tmp_x;
+  // if this is the first iteration, we don't have the
+  // the energy/expectation value E(0.0, ...)
+  // for the other iterations, we cache the oldEnergy
+  if (zeroExpValue == 0.0) {
+    tmp_x = x;
+    tmp_x.insert(tmp_x.begin(), 0.0);
+    zeroExpValue = vqe->execute(xacc::qalloc(observable->nBits()), tmp_x)[0];
+  }
+
+  tmp_x = x;
+  tmp_x.insert(tmp_x.begin(), coeff * xacc::constants::pi / 2.0);
+  auto plusExpValue = vqe->execute(xacc::qalloc(observable->nBits()), tmp_x)[0];
+
+  tmp_x = x;
+  tmp_x.insert(tmp_x.begin(), -coeff * xacc::constants::pi / 2.0);
+  auto minusExpValue =
+      vqe->execute(xacc::qalloc(observable->nBits()), tmp_x)[0];
+
+  auto B = zeroExpValue - (plusExpValue + minusExpValue) / 2.0;
+  auto C = (plusExpValue - minusExpValue) / 2.0;
+
+  return std::atan2(-C, -B) * coeff;
+}
+
+double
+ADAPT::measureOperator(const std::shared_ptr<Observable> obs,
+                       const std::shared_ptr<CompositeInstruction> kernel,
+                       const std::vector<double> &x,
+                       const int bufferSize) const {
+
+  // observe
+  auto evaled = kernel->operator()(x);
+  auto kernels = obs->observe(evaled);
+
+  // we loop over all measured circuits
+  // and check if that term has been measured
+  // if so, we just multiply the measurement by the coefficient
+  // We gather all new circuits into fsToExec and execute
+  // Because these are all commutators, we don't need to worry about the I term
+  std::vector<std::shared_ptr<CompositeInstruction>> fsToExec;
+  std::vector<std::complex<double>> coefficients;
+  double total = 0.0;
+  for (auto &f : kernels) {
+    std::complex<double> coeff = f->getCoefficient();
+    if (cachedMeasurements.find(f->name()) != cachedMeasurements.end()) {
+      total += std::real(coeff * cachedMeasurements[f->name()]);
+    } else if (fabs(coeff) >= _measurementThreshold) {
+      fsToExec.push_back(f);
+      coefficients.push_back(coeff);
+    }
+  }
+
+  // for circuits that have not been executed previously
+  auto tmpBuffer = xacc::qalloc(bufferSize);
+  accelerator->execute(tmpBuffer, fsToExec);
+  auto buffers = tmpBuffer->getChildren();
+  for (int i = 0; i < fsToExec.size(); i++) {
+    auto expval = buffers[i]->getExpectationValueZ();
+    total += std::real(expval * coefficients[i]);
+    cachedMeasurements.emplace(fsToExec[i]->name(), expval);
+  }
+
+  return total;
 }
 
 } // namespace algorithm
