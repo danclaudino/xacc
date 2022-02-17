@@ -15,20 +15,41 @@
 #define XACC_ACCELERATOR_BUFFER_DECORATOR_HPP_
 
 #include "AcceleratorBuffer.hpp"
+#include "Identifiable.hpp"
 
 namespace xacc {
 
-class AcceleratorBufferDecorator : public AcceleratorBuffer {
+// we make this inherit from Identifiable in case there may be more such codes
+class AcceleratorBufferDecorator : public AcceleratorBuffer, public Identifiable {
 protected:
   std::shared_ptr<AcceleratorBuffer> decoratedAcceleratorBuffer;
+
 
 public:
   AcceleratorBufferDecorator() {}
   AcceleratorBufferDecorator(std::shared_ptr<AcceleratorBuffer> a)
       : decoratedAcceleratorBuffer(a) {}
+
   void setDecorated(std::shared_ptr<AcceleratorBuffer> a) {
     decoratedAcceleratorBuffer = a;
   }
+
+  void addExtraInfo(const std::string infoName, ExtraInfo i) {
+    decoratedAcceleratorBuffer->addExtraInfo(infoName, i);
+    return;
+  }
+
+  bool hasExtraInfoKey(const std::string infoName) {
+  return decoratedAcceleratorBuffer->getInformation().count(infoName);
+  }
+
+  void appendChild(const std::string name,
+                   std::shared_ptr<AcceleratorBuffer> buffer) {
+  decoratedAcceleratorBuffer->appendChild(name, buffer);
+  }
+
+  const int size() { return decoratedAcceleratorBuffer->size(); }
+
   std::shared_ptr<AcceleratorBuffer> getDecorated() { return decoratedAcceleratorBuffer; }
 };
 

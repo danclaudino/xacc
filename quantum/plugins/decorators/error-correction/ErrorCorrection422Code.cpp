@@ -1,6 +1,8 @@
 #include "ErrorCorrection422Code.hpp"
 #include <numeric>
+#include "AcceleratorDecorator.hpp"
 #include "xacc.hpp"
+#include "xacc_plugin.hpp"
 
 namespace xacc {
 namespace quantum {
@@ -71,7 +73,7 @@ ErrorCorrection422Code::computeMeasurementProbability(const std::string &bitStr)
 }
 
 const double ErrorCorrection422Code::getExpectationValueZ() {
-  double aver = 0.0;
+  //double aver = 0.0;
   std::pair<double, double> avers = {0.0, 0.0};
   auto has_even_parity = [](unsigned int x) -> int {
     unsigned int count = 0, i, b = 1;
@@ -88,9 +90,7 @@ const double ErrorCorrection422Code::getExpectationValueZ() {
 
   // check the second ancilla
 
-  if (this->hasExtraInfoKey("exp-val-z")) {
-    aver = mpark::get<double>(getInformation("exp-val-z"));
-  } else {
+ 
     if (postSelectedBitStringToCounts.empty()) {
       xacc::error("called getExpectationValueZ() on an AcceleratorBuffer with "
                   "no measurements!");
@@ -110,11 +110,44 @@ const double ErrorCorrection422Code::getExpectationValueZ() {
       } else {
         avers.first += p;
       }
-      aver += p;
     }
-  }
-  return aver;
+
+  // because this method returns double, we can get both averages 
+  // from return
+  this->addExtraInfo("exp-val-z-0", avers.first);
+  this->addExtraInfo("exp-val-z-1", avers.second);
+  return avers.first;
 }
 
 } // namespace quantum
-} // namespace quantum
+} // namespace xacc
+
+#include "cppmicroservices/BundleActivator.h"
+#include "cppmicroservices/BundleContext.h"
+#include "cppmicroservices/ServiceProperties.h"
+
+using namespace cppmicroservices;
+
+namespace {
+
+class US_ABI_LOCAL ErrorCorrection422CodeActivator : public BundleActivator {
+
+public:
+  ErrorCorrection422CodeActivator() {}
+
+  void Start(BundleContext context) {
+    auto c = std::make_shared<xacc::quantum::ErrorCorrection422Code>();
+
+    context.RegisterService<xacc::AcceleratorBufferDecorator>(c);
+    context.RegisterService<xacc::AcceleratorBuffer>(c);
+
+  }
+
+  /**
+   */
+  void Stop(BundleContext /*context*/) {}
+};
+
+} // namespace
+
+CPPMICROSERVICES_EXPORT_BUNDLE_ACTIVATOR(ErrorCorrection422CodeActivator)

@@ -1,0 +1,6 @@
+{
+  "bundle.symbolic_name" : "xacc_ecc_decorator",
+  "bundle.activator" : true,
+  "bundle.name" : "XACC Error Correction code Decorator",
+  "bundle.description" : "This bundle provides the Error Correction code AcceleratorBuffer Decorator."
+}

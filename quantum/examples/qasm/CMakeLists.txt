@@ -22,6 +22,8 @@ target_link_libraries(deuteronH3_from_qasm_vqe_algo PRIVATE xacc xacc-quantum-ga
 add_executable(ddcl_example ddcl_example.cpp)
 target_link_libraries(ddcl_example PRIVATE xacc)
 
+add_executable(422_code 422_code.cpp)
+target_link_libraries(422_code PRIVATE xacc xacc-quantum-gate)
 
 add_executable(bell_noisy bell_readout_py_load.cpp)
 target_link_libraries(bell_noisy PRIVATE xacc)

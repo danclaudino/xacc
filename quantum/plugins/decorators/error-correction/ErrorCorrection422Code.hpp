@@ -56,6 +56,12 @@ public:
   double computeMeasurementProbability(const std::string &bitStr) override;
 
   const double getExpectationValueZ() override;
+
+  const std::string name() const override { return "error-correction-code"; }
+  const std::string description() const override { return ""; }
+
+  ~ErrorCorrection422Code() override { }
+
 };
 
 } // namespace quantum

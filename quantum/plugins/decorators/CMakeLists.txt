@@ -64,3 +64,4 @@ if(XACC_BUILD_TESTS)
 endif()
 
 add_subdirectory(hpc-virtualization)
+add_subdirectory(error-correction)
