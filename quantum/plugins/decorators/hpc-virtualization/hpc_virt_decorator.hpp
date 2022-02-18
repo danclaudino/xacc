@@ -13,6 +13,12 @@
 #ifndef XACC_HPC_VIRT_DECORATOR_HPP_
 #define XACC_HPC_VIRT_DECORATOR_HPP_
 
+#ifdef MPI_ENABLED
+#include "mpi.h"
+#endif
+
+#include "MPIProxy.hpp"
+
 #include "AcceleratorDecorator.hpp"
 #include "TearDown.hpp"
 namespace boost {
@@ -31,6 +37,8 @@ protected:
   int n_virtual_qpus = 1;
   // The MPI communitor for each QPU.
   std::shared_ptr<boost::mpi::communicator> qpuComm;
+  std::shared_ptr<ProcessGroup> comm;
+  std::shared_ptr<MPICommProxy> comm2;
 
 
 public:

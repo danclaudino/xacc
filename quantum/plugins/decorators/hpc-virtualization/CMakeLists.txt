@@ -15,7 +15,7 @@ if(MPI_FOUND)
   set(LIBRARY_NAME xacc-hpc-virt-decorator)
 
   file(GLOB_RECURSE HEADERS *.hpp)
-  file(GLOB SRC hpc_virt_decorator.cpp)
+  file(GLOB SRC hpc_virt_decorator.cpp MPIProxy.cpp)
 
   # Set up dependencies to resources to track changes
   usfunctiongetresourcesource(TARGET

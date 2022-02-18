@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
 
   // Get reference to the Accelerator
   auto accelerator =
-      xacc::getAccelerator("tnqvm", {{"tnqvm-visitor", "exatn"}});
+      xacc::getAccelerator("qpp", {{"tnqvm-visitor", "exatn"}});
 
   // Decorate the accelerator with HPC Virtualization.
   // This decorator assumes the provided number of input QPUs
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
                            "- 2.1433 Y0Y1"
                            "+ .21829 Z0 - 6.125 Z1"));
 
-  auto optimizer = xacc::getOptimizer("nlopt");
+  auto optimizer = xacc::getOptimizer("nlopt", {{"maxeval", 1}});
 
   // JIT map XASM Ansatz to IR
   xacc::qasm(R"(
