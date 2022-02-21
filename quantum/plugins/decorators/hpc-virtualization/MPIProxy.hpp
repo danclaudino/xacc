@@ -10,8 +10,6 @@ Copyright (C) 2018-2021 Oak Ridge National Laboratory (UT-Battelle) **/
 #include <memory>
 #include <cassert>
 
-//#include "errors.hpp"
-
 namespace xacc {
 
 class MPICommProxy {

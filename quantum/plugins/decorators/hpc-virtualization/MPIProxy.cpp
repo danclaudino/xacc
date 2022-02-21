@@ -5,9 +5,7 @@ Copyright (C) 2018-2021 Oak Ridge National Laboratory (UT-Battelle) **/
 
 #include "MPIProxy.hpp"
 
-#ifdef MPI_ENABLED
 #include "mpi.h"
-#endif
 
 #include <cstdlib>
 
@@ -24,7 +22,6 @@ std::vector<unsigned int> processes2;
 
 MPICommProxy::~MPICommProxy()
 {
-#ifdef MPI_ENABLED
  if(destroy_on_free_){
   if(!(this->isEmpty())){
    if(mpi_comm_ptr_.use_count() == 1){
@@ -40,20 +37,17 @@ MPICommProxy::~MPICommProxy()
    }
   }
  }
-#endif
 }
 
 
 bool MPICommProxy::operator==(const MPICommProxy & another) const
 {
  bool equal = true;
-#ifdef MPI_ENABLED
  auto * lhs_comm = this->get<MPI_Comm>();
  auto * rhs_comm = another.get<MPI_Comm>();
  int res;
  auto errc = MPI_Comm_compare(*lhs_comm,*rhs_comm,&res); assert(errc == MPI_SUCCESS);
  equal = (res == MPI_IDENT);
-#endif
  return equal;
 }
 
@@ -102,7 +96,7 @@ std::shared_ptr<ProcessGroup> ProcessGroup::split(int my_subgroup) const
  if(this->getSize() == 1){
   if(my_subgroup >= 0) subgroup = std::make_shared<ProcessGroup>(*this);
  }else{
-#ifdef MPI_ENABLED
+  if(my_subgroup >= 0) subgroup = std::make_shared<ProcessGroup>(*this);
   if(!(intra_comm_.isEmpty())){
    auto & mpicomm = intra_comm_.getRef<MPI_Comm>();
    int color = MPI_UNDEFINED;
@@ -131,7 +125,6 @@ std::shared_ptr<ProcessGroup> ProcessGroup::split(int my_subgroup) const
    std::cout << "#ERROR(xacc::ProcessGroup::split): Empty MPI communicator!\n" << std::flush;
    assert(false);
   }
-#endif
  }
  return subgroup;
 }

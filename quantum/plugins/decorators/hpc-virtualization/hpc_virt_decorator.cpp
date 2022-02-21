@@ -16,12 +16,7 @@
 #include "xacc.hpp"
 #include "MPIProxy.hpp"
 
-#include <boost/mpi.hpp>
-#include <boost/mpi/collectives/all_gather.hpp>
-#include <boost/serialization/string.hpp>
-#include <boost/serialization/vector.hpp>
-
-#include <mpi.h>
+//#include <mpi.h>
 
 namespace xacc {
 namespace quantum {
@@ -76,26 +71,21 @@ void HPCVirtDecorator::execute(
     MPI_Init(&xacc::argc, &xacc::argv);
   }
 
-  mpi::communicator world;
-
-  auto world_tmp = std::make_shared<ProcessGroup>(MPI_COMM_WORLD, n_virtual_qpus);
+  auto world = std::make_shared<ProcessGroup>(MPI_COMM_WORLD, n_virtual_qpus);
 
   // Get the rank and size in the original communicator
-  int world_rank = world.rank(), world_size = world.size();
-
-  //auto world_size_tmp = world_tmp->getSize();
-  int world_size_tmp;// = world_tmp->getSize();
-  int world_rank_tmp;
-  MPI_Comm_size(world_tmp->getMPICommProxy().getRef<MPI_Comm>(), &world_size_tmp);
-  MPI_Comm_rank(world_tmp->getMPICommProxy().getRef<MPI_Comm>(), &world_rank_tmp);
+  int world_size;
+  int world_rank;
+  MPI_Comm_size(world->getMPICommProxy().getRef<MPI_Comm>(), &world_size);
+  MPI_Comm_rank(world->getMPICommProxy().getRef<MPI_Comm>(), &world_rank);
 
   if (world_size < n_virtual_qpus) {
     // The number of MPI processes is less than the number of requested virtual
     // QPUs, just execute as if there is only one virtual QPU and give the QPU
     // the whole MPI_COMM_WORLD.
-    void *qpu_comm_ptr = reinterpret_cast<void *>((MPI_Comm)world);
+    void *qpu_comm_ptr = reinterpret_cast<void *>(world.get());
     if (!qpuComm) {
-      qpuComm = std::make_shared<boost::mpi::communicator>(world);
+      qpuComm = world;
     }
     decoratedAccelerator->updateConfiguration(
         {{"mpi-communicator", qpu_comm_ptr}});
@@ -103,78 +93,47 @@ void HPCVirtDecorator::execute(
     decoratedAccelerator->execute(buffer, functions);
     return;
   }
-
-  if (world_size_tmp < n_virtual_qpus) {
-    // The number of MPI processes is less than the number of requested virtual
-    // QPUs, just execute as if there is only one virtual QPU and give the QPU
-    // the whole MPI_COMM_WORLD.
-    void *qpu_comm_ptr = reinterpret_cast<void *>(world_tmp.get());
-    if (!comm) {
-      comm = world_tmp;
-    }
-    decoratedAccelerator->updateConfiguration(
-        {{"mpi-communicator", qpu_comm_ptr}});
-    // just execute
-    decoratedAccelerator->execute(buffer, functions);
-    return;
-  }
-
-  // Get the color for this rank
-  int color = world_rank % n_virtual_qpus;
 
   // get the number of communicators
-  int color_tmp, nComms = std::ceil((double)world_size_tmp / n_virtual_qpus);
+  int color, nComms = std::ceil((double)world_size / n_virtual_qpus);
 
   // get colors
   if (world_rank >= nComms * n_virtual_qpus) { 
-    color_tmp = nComms - 1;
+    color = nComms - 1;
   } else {
     for (int i = 0; i < nComms - 1; i++) {
-      if (world_rank_tmp >= i * nComms && world_rank_tmp < (i + 1) * nComms) {
-        color_tmp = i;
+      if (world_rank >= i * nComms && world_rank < (i + 1) * nComms) {
+        color = i;
       }
     } 
   }
 
  // get rank-0 in each communicator
-  std::vector<unsigned int> ranks; 
+  std::vector<unsigned int> ranksToSplit; 
   for (int i = 0; i < nComms; i++) {
-    ranks.push_back(i * nComms);
+    ranksToSplit.push_back(i * nComms);
   }
 
   // Split the communicator based on the color and use the
   // original rank for ordering
   if (!qpuComm) {
     // Splits MPI_COMM_WORLD into sub-communicators if not already.
-    qpuComm = std::make_shared<boost::mpi::communicator>(
-        world.split(color, world_rank));
-  }
-
-  if (!comm) {
-    // Splits MPI_COMM_WORLD into sub-communicators if not already.
-    comm = world_tmp->split(color_tmp);
+    qpuComm = world->split(color);
   }
   auto qpu_comm = *qpuComm;
-  auto qpu_comm_tmp = comm; // this is already a pointer
 
   // current rank now has a color to indicate which sub-comm it belongs to
   // Give that sub communicator to the accelerator
-  void *qpu_comm_ptr = reinterpret_cast<void *>((MPI_Comm)qpu_comm);
+  void *qpu_comm_ptr = reinterpret_cast<void *>(qpu_comm.getMPICommProxy().getRef<MPI_Comm>());
   decoratedAccelerator->updateConfiguration(
       {{"mpi-communicator", qpu_comm_ptr}});
-
-  void *qpu_comm_ptr_tmp = reinterpret_cast<void *>(comm.get());
-
-  // this part is what happens in each process, so it is the same
-  // regardless on MPI or boost::mpi
 
   // Everybody split the CompositeInstructions vector into n_virtual_qpu
   // segments
   auto split_vecs = split_vector(functions, n_virtual_qpus);
 
   // Get the segment corresponding to this color
-  auto my_circuits = split_vecs[color_tmp];
-  //auto my_circuits = split_vecs[color_tmp];
+  auto my_circuits = split_vecs[color];
 
   // Create a local buffer and execute
   auto my_buffer = xacc::qalloc(buffer->size());
@@ -195,19 +154,20 @@ void HPCVirtDecorator::execute(
         local_name_to_buffer[my_circuit->name()]->getExpectationValueZ();
   }
 
-  // Now we go back to MPI
-  
+   
   // Here I try to do what Alex did below with Allreduce
-  auto zeros_rank = std::make_shared<ProcessGroup>(world_tmp->getMPICommProxy().getRef<MPI_Comm>(), ranks);
+  auto ranksToSplitComm = std::make_shared<ProcessGroup>(world->getMPICommProxy().getRef<MPI_Comm>(), ranksToSplit);
   double global_energy = 0.0;
-  if ((world_rank_tmp % nComms) == 0) {
+  if (!(world_rank % nComms)) {
 
     std::cout << "Before calling reduce in rank " << world_rank << " " << local_energy <<   "\n";
-    MPI_Allreduce(&local_energy, &global_energy, 1, MPI_DOUBLE, MPI_SUM, zeros_rank->getMPICommProxy().getRef<MPI_Comm>());
+    MPI_Reduce(&local_energy, &global_energy, 1, MPI_DOUBLE, MPI_SUM, 0, ranksToSplitComm->getMPICommProxy().getRef<MPI_Comm>());
+    //MPI_Allreduce(&local_energy, &global_energy, 1, MPI_DOUBLE, MPI_SUM, ranksToSplitComm->getMPICommProxy().getRef<MPI_Comm>());
     std::cout << "After calling reduce in rank " << world_rank <<  "\n";
 
   }
 
+  MPI_Barrier(qpu_comm.getMPICommProxy().getRef<MPI_Comm>());  
 /*
   // for all rank 0s on qpu_comms, split
   // and add them to a new communicator, then
@@ -224,20 +184,18 @@ void HPCVirtDecorator::execute(
                         decltype(all_local_energies)::value_type(0));
   }
 */
-  std::cout << global_energy << "\n";
-
-  exit(0);
-   MPI_Barrier(qpu_comm_tmp->getMPICommProxy().getRef<MPI_Comm>());
   //qpu_comm.barrier();
 
   // Now broadcast that global_energy to all
   // other ranks in the sub groups
-  mpi::broadcast(qpu_comm, global_energy, 0);
+  //mpi::broadcast(qpu_comm, global_energy, 0);
 
   // Setup a barrier
-  qpu_comm.barrier();
-  world.barrier();
+  //qpu_comm.barrier();
+  //world.barrier();
+   MPI_Barrier(world->getMPICommProxy().getRef<MPI_Comm>());  
 
+  exit(0);
   // every rank should have global_energy now
   buffer->addExtraInfo("__internal__decorator_aggregate_vqe__", global_energy);
 
