@@ -19,12 +19,7 @@
 
 #include "AcceleratorDecorator.hpp"
 #include "TearDown.hpp"
-namespace boost {
-namespace mpi {
-// Forward declaration
-class communicator;
-} // namespace mpi
-} // namespace boost
+
 namespace xacc {
 
 namespace quantum {
@@ -34,7 +29,6 @@ protected:
 
   int n_virtual_qpus = 1;
   // The MPI communitor for each QPU.
-  //std::shared_ptr<boost::mpi::communicator> qpuComm;
   std::shared_ptr<ProcessGroup> qpuComm;
   std::shared_ptr<MPICommProxy> comm2;
 
@@ -60,7 +54,7 @@ public:
 private:
   template <typename T>
   std::vector<std::vector<T>> split_vector(const std::vector<T> &vec,
-                                           size_t n) {
+                                           size_t n, int rank, int & color) {
     std::vector<std::vector<T>> outVec;
 
     size_t length = vec.size() / n;
@@ -73,6 +67,8 @@ private:
       end += (remain > 0) ? (length + !!(remain--)) : length;
 
       outVec.push_back(std::vector<T>(vec.begin() + begin, vec.begin() + end));
+
+      if ((rank >= begin) && (rank < end)) color = i;
 
       begin = end;
     }
