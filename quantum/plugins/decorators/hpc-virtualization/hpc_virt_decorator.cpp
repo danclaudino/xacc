@@ -9,6 +9,7 @@
  *
  * Contributors:
  *   Alexander J. McCaskey - initial API and implementation
+ *   Daniel Claudino - MPI native implementation
  *******************************************************************************/
 #include "hpc_virt_decorator.hpp"
 #include "InstructionIterator.hpp"
@@ -62,14 +63,6 @@ void HPCVirtDecorator::execute(
   // we wish to evaluate the <O> for each by partitioning
   // their quantum execution across the node sub-groups.
 
-  int initialized, provided;
-  MPI_Initialized(&initialized);
-  if (!initialized) {
-    MPI_Init_thread(&xacc::argc, &xacc::argv, MPI_THREAD_MULTIPLE, &provided);
-    if (provided != MPI_THREAD_MULTIPLE) {
-      std::cout << "MPI_THREAD_MULTIPLE not provided\n";
-    }
-  }
 
   // Get the rank and size in the original communicator
   int world_size, world_rank;
@@ -158,18 +151,6 @@ void HPCVirtDecorator::execute(
   return;
 }
 
-void HPCVirtTearDown::tearDown() {
-
-  int finalized, initialized;
-  MPI_Initialized(&initialized);
-  if (initialized) {
-    MPI_Finalized(&finalized);
-    if (!finalized) {
-      MPI_Finalize();
-    }
-  }
-}
-
 } // namespace quantum
 } // namespace xacc
 
@@ -192,8 +173,6 @@ public:
     context.RegisterService<xacc::AcceleratorDecorator>(c);
     context.RegisterService<xacc::Accelerator>(c);
 
-    context.RegisterService<xacc::TearDown>(
-        std::make_shared<xacc::quantum::HPCVirtTearDown>());
   }
 
   /**

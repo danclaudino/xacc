@@ -10,7 +10,6 @@
 # Contributors: Alexander J. McCaskey - initial API and implementation
 # ******************************************************************************
 # */
-find_package(MPI)
 if(MPI_FOUND)
   set(LIBRARY_NAME xacc-hpc-virt-decorator)
 
@@ -49,7 +48,7 @@ if(MPI_FOUND)
                            manifest.json)
 
   target_include_directories(${LIBRARY_NAME} PUBLIC .)
-  target_link_libraries(${LIBRARY_NAME} PUBLIC xacc Boost::mpi)
+  target_link_libraries(${LIBRARY_NAME} PUBLIC xacc ${MPI_CXX_LIBRARIES})
 
   if(APPLE)
     set_target_properties(${LIBRARY_NAME}
