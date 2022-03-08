@@ -15,6 +15,7 @@
 #define XACC_HPC_VIRT_DECORATOR_HPP_
 
 #include "mpi.h"
+#include "xacc.hpp"
 #include "MPIProxy.hpp"
 #include "AcceleratorDecorator.hpp"
 
@@ -28,6 +29,8 @@ protected:
   int n_virtual_qpus = 1;
   // The MPI communitor for each QPU.
   std::shared_ptr<ProcessGroup> qpuComm;
+  //std::vector<std::string> bufferNames;
+  //std::map<std::string, double> expVals; 
 
 
 public:
@@ -72,6 +75,19 @@ private:
 
     return outVec;
   }
+/*
+// Converts vector<string> to vector<char>.
+char string_to_char(const std::string & string) {
+    char cstring;
+        for(size_t i = 0; i < strlen(string.c_str()); ++i)
+        {
+            cstrings.push_back(s.c_str()[i]);
+        }
+
+    return cstrings;
+}
+*/
+
 };
 
 } // namespace quantum

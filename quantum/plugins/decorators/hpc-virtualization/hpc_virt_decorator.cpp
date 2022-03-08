@@ -129,9 +129,70 @@ void HPCVirtDecorator::execute(
   // Split world along rank-0 in each sub-communicator and reduce the local energies
   auto zeroRanksComm = world->split(world_rank == qpuComm->getProcessRanks()[0]);
   double global_energy = 0.0;
+  int nGlobalChildren = 0;
+  std::vector<int> nKeysPerComm(n_virtual_qpus), nKeySizesPerComm(n_virtual_qpus);
+  std::vector<int> globalKeySizes;
+  std::vector<char> globalKeyChars;
+  
   if (world_rank == qpuComm->getProcessRanks()[0]) {
     MPI_Allreduce(&local_energy, &global_energy, 1,
       MPI_DOUBLE, MPI_SUM, zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+
+    // Here we reduce on the number of children buffers
+    auto nLocalChildren = my_buffer->nChildren();
+    MPI_Allreduce(&nLocalChildren, &nGlobalChildren, 1,
+      MPI_INT, MPI_SUM, zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+
+    // get number of keys per comm
+    MPI_Allgather(&nLocalChildren, 1, MPI_INT, nKeysPerComm.data(), 1, MPI_INT, zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+
+    // get displacements for MPI_Allgatherv
+    std::vector<int> nKeyShift(n_virtual_qpus);
+    if (world_rank == 0) {
+      for(int i = 0; i < n_virtual_qpus; i++) {
+        nKeyShift[i] = std::accumulate(nKeysPerComm.begin(),
+                                          nKeysPerComm.begin() + i,
+                                          decltype(nKeysPerComm)::value_type(0));
+      }
+    }
+    // broadcast displacements
+    MPI_Bcast(nKeyShift.data(),
+              nKeyShift.size(),
+              MPI_INT, 0, 
+              zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+
+    // get size of each key in the communicator
+    std::vector<char> localKeys;
+    for(auto name : my_buffer->getChildrenNames()) {
+      for (auto c : name) {
+        localKeys.push_back(c);
+      }
+    }
+    auto localKeySize = localKeys.size();
+
+    // gather the sizes of all keys
+    MPI_Allgather(&localKeySize, 1, MPI_INT, nKeySizesPerComm.data(), 1, MPI_INT, zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+
+    std::vector<int> keySizeShift(n_virtual_qpus);
+    if (world_rank == 0) {
+      for(int i = 1; i < n_virtual_qpus; i++) {
+        keySizeShift[i] =  std::accumulate(nKeySizesPerComm.begin(),
+                                          nKeySizesPerComm.begin() + i,
+                                          decltype(nKeySizesPerComm)::value_type(0));
+      }
+    }
+    // broadcast displacements
+    MPI_Bcast(keySizeShift.data(),
+              keySizeShift.size(),
+              MPI_INT, 0, 
+              zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+
+    auto nGlobalKeyChars = std::accumulate(nKeySizesPerComm.begin(),
+                                          nKeySizesPerComm.end(),
+                                          decltype(nKeySizesPerComm)::value_type(0)); 
+    globalKeyChars.resize(nGlobalKeyChars);
+    MPI_Allgatherv(localKeys.data(), localKeys.size(), MPI_CHAR, globalKeyChars.data(), nKeySizesPerComm.data(), keySizeShift.data(), MPI_CHAR, zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+
   }
 
   MPI_Barrier(qpuComm->getMPICommProxy().getRef<MPI_Comm>());  
