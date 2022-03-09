@@ -129,30 +129,43 @@ void HPCVirtDecorator::execute(
   // Split world along rank-0 in each sub-communicator and reduce the local energies
   auto zeroRanksComm = world->split(world_rank == qpuComm->getProcessRanks()[0]);
   double global_energy = 0.0;
-  int nGlobalChildren = 0;
-  std::vector<int> nKeysPerComm(n_virtual_qpus), nKeySizesPerComm(n_virtual_qpus);
-  std::vector<int> globalKeySizes;
   std::vector<char> globalKeyChars;
+  std::vector<std::string> keys;
   
   if (world_rank == qpuComm->getProcessRanks()[0]) {
     MPI_Allreduce(&local_energy, &global_energy, 1,
       MPI_DOUBLE, MPI_SUM, zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
 
-    // Here we reduce on the number of children buffers
+  }
+
+  // Here we get the number of children buffers
+  // and the number of children per comm
+  int nGlobalChildren = 0;
+  std::vector<int> nCommChildren(n_virtual_qpus);
+  if (world_rank == qpuComm->getProcessRanks()[0]) {
     auto nLocalChildren = my_buffer->nChildren();
     MPI_Allreduce(&nLocalChildren, &nGlobalChildren, 1,
       MPI_INT, MPI_SUM, zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
 
-    // get number of keys per comm
-    MPI_Allgather(&nLocalChildren, 1, MPI_INT, nKeysPerComm.data(), 1, MPI_INT, zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+    // get number of children per comm
+    MPI_Allgather(&nLocalChildren, 1, MPI_INT, nCommChildren.data(), 1, MPI_INT, zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+  }
+  MPI_Bcast(&nGlobalChildren, 1, MPI_INT, 0, qpuComm->getMPICommProxy().getRef<MPI_Comm>());
+  MPI_Bcast(nCommChildren.data(), nCommChildren.size(), MPI_INT, 0, qpuComm->getMPICommProxy().getRef<MPI_Comm>());
 
-    // get displacements for MPI_Allgatherv
+
+  // get expectation values and the size of the key of each child buffer
+  std::vector<double> globalExpVals(nGlobalChildren);
+  std::vector<int> globalKeySizes(nGlobalChildren);
+  if (world_rank == qpuComm->getProcessRanks()[0]) {
+
+    // get displacements for the keys in each comm
     std::vector<int> nKeyShift(n_virtual_qpus);
     if (world_rank == 0) {
       for(int i = 0; i < n_virtual_qpus; i++) {
-        nKeyShift[i] = std::accumulate(nKeysPerComm.begin(),
-                                          nKeysPerComm.begin() + i,
-                                          decltype(nKeysPerComm)::value_type(0));
+        nKeyShift[i] = std::accumulate(nCommChildren.begin(),
+                                          nCommChildren.begin() + i,
+                                          decltype(nCommChildren)::value_type(0));
       }
     }
     // broadcast displacements
@@ -162,23 +175,56 @@ void HPCVirtDecorator::execute(
               zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
 
     // get size of each key in the communicator
+    std::vector<double> localExpVals;
+    std::vector<int> localChildKeySizes;
+    for(auto child : my_buffer->getChildren()) {
+      localChildKeySizes.push_back(child->name().size());
+      localExpVals.push_back(child->getExpectationValueZ());
+    }
+
+    // gather all expectation values
+    MPI_Allgatherv(localExpVals.data(), localExpVals.size(), MPI_DOUBLE, globalExpVals.data(), nCommChildren.data(), nKeyShift.data(), MPI_DOUBLE, zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+
+    // gather the size of each child key
+    MPI_Allgatherv(localChildKeySizes.data(), localChildKeySizes.size(), MPI_INT, globalKeySizes.data(), nCommChildren.data(), nKeyShift.data(), MPI_INT, zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+
+}
+
+  // broadcast expectation values and the size of each key
+  MPI_Bcast(globalExpVals.data(), globalExpVals.size(), MPI_DOUBLE, 0, qpuComm->getMPICommProxy().getRef<MPI_Comm>());
+  MPI_Bcast(globalKeySizes.data(), globalKeySizes.size(), MPI_INT, 0, qpuComm->getMPICommProxy().getRef<MPI_Comm>());
+
+  // get total key size
+  auto nGlobalKeyChars = std::accumulate(globalKeySizes.begin(),
+                                          globalKeySizes.end(),
+                                          decltype(globalKeySizes)::value_type(0)); 
+  // get chars from keys
+  globalKeyChars.resize(nGlobalKeyChars);
+  std::vector<int> commKeySize(n_virtual_qpus);
+  int shift = 0;
+  for(int i = 0; i < n_virtual_qpus; i++) {
+    for (int j = shift; j < nCommChildren[i] + shift; j++) {
+      commKeySize[i] += globalKeySizes[j];
+    }
+    shift += nCommChildren[i];
+  }
+
+  // gather all keys chars
+  if (world_rank == qpuComm->getProcessRanks()[0]) {
+
     std::vector<char> localKeys;
-    for(auto name : my_buffer->getChildrenNames()) {
-      for (auto c : name) {
+    for(auto child : my_buffer->getChildren()) {
+      for (auto c : child->name()) {
         localKeys.push_back(c);
       }
     }
-    auto localKeySize = localKeys.size();
-
-    // gather the sizes of all keys
-    MPI_Allgather(&localKeySize, 1, MPI_INT, nKeySizesPerComm.data(), 1, MPI_INT, zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
 
     std::vector<int> keySizeShift(n_virtual_qpus);
     if (world_rank == 0) {
       for(int i = 1; i < n_virtual_qpus; i++) {
-        keySizeShift[i] =  std::accumulate(nKeySizesPerComm.begin(),
-                                          nKeySizesPerComm.begin() + i,
-                                          decltype(nKeySizesPerComm)::value_type(0));
+        keySizeShift[i] =  std::accumulate(commKeySize.begin(),
+                                          commKeySize.begin() + i,
+                                          decltype(commKeySize)::value_type(0));
       }
     }
     // broadcast displacements
@@ -186,27 +232,51 @@ void HPCVirtDecorator::execute(
               keySizeShift.size(),
               MPI_INT, 0, 
               zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
-
-    auto nGlobalKeyChars = std::accumulate(nKeySizesPerComm.begin(),
-                                          nKeySizesPerComm.end(),
-                                          decltype(nKeySizesPerComm)::value_type(0)); 
-    globalKeyChars.resize(nGlobalKeyChars);
-    MPI_Allgatherv(localKeys.data(), localKeys.size(), MPI_CHAR, globalKeyChars.data(), nKeySizesPerComm.data(), keySizeShift.data(), MPI_CHAR, zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+    
+    MPI_Allgatherv(localKeys.data(), localKeys.size(), MPI_CHAR, globalKeyChars.data(), commKeySize.data(), keySizeShift.data(), MPI_CHAR, zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
 
   }
+/*
+    // rebuild the keys vector that all processes share
+    int shift = 0;
+    for (int i = 0; i < nGlobalChildren; i++) {
+      auto it = globalKeyChars.begin() + shift;
+      std::string name(it, it +  globalKeySizes[i]);
+      keys.push_back(name);
+      shift += globalKeySizes[i];
+    }
+*/
 
-  MPI_Barrier(qpuComm->getMPICommProxy().getRef<MPI_Comm>());  
+  //MPI_Barrier(qpuComm->getMPICommProxy().getRef<MPI_Comm>());  
 
   // Now broadcast that global_energy to all
   // other ranks in the sub groups
   MPI_Bcast(&global_energy, 1, MPI_DOUBLE, 0, qpuComm->getMPICommProxy().getRef<MPI_Comm>());
+  MPI_Bcast(globalKeyChars.data(), globalKeyChars.size(), MPI_CHAR, 0, qpuComm->getMPICommProxy().getRef<MPI_Comm>());
+
+  // now every process has everything to rebuild the buffer
+  //std::map<std::string, std::shared_ptr<AcceleratorBuffer>> children;
+
+  shift = 0;
+  for (int i = 0; i < nGlobalChildren; i++) {
+
+    // get child name
+    auto it = globalKeyChars.begin() + shift;
+    std::string name(it, it +  globalKeySizes[i]);
+
+    auto child = xacc::qalloc(buffer->size());
+    child->setName(name);
+    child->addExtraInfo("exp-val-z", globalExpVals[i]);
+    buffer->appendChild(name, child);
+    shift += globalKeySizes[i];
+  }
 
   // Setup a barrier
   MPI_Barrier(qpuComm->getMPICommProxy().getRef<MPI_Comm>());  
   MPI_Barrier(world->getMPICommProxy().getRef<MPI_Comm>());  
 
   // every rank should have global_energy now
-  buffer->addExtraInfo("__internal__decorator_aggregate_vqe__", global_energy);
+  //buffer->addExtraInfo("__internal__decorator_aggregate_vqe__", global_energy);
   buffer->addExtraInfo("rank", world_rank);
 
   return;
