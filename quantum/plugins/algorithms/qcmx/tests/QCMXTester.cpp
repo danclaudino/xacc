@@ -49,6 +49,38 @@ TEST(QCMXTester, checkSimple) {
   EXPECT_NEAR(-1.14499, map["Soldatov"], 1e-3);
 }
 
+TEST(QCMXTester, checkPDS_VQS) {
+
+  auto H = xacc::quantum::getObservable(
+      "pauli", std::string("0.4 Z0 + 0.4 Z1 + 0.2 X0 X1"));
+
+
+  auto provider = xacc::getService<xacc::IRProvider>("quantum");
+  auto ansatz = provider->createComposite("initial-state");
+  ansatz->addVariables({"x0", "x1", "x2", "x3"});
+  ansatz->addInstruction(provider->createInstruction("Ry", {0}, {"x0"}));
+  ansatz->addInstruction(provider->createInstruction("Ry", {1}, {"x1"}));
+  ansatz->addInstruction(provider->createInstruction("CNOT", {0, 1}));
+  ansatz->addInstruction(provider->createInstruction("Ry", {1}, {"x2"}));
+  ansatz->addInstruction(provider->createInstruction("Ry", {0}, {"x3"}));
+
+  auto acc = xacc::getAccelerator("qsim");
+
+  auto qcmx = xacc::getService<xacc::Algorithm>("pds-vqs");
+  qcmx->initialize({{"accelerator", acc},
+                    {"observable", H},
+                    {"ansatz", ansatz},
+                    {"cmx-order", 2}});
+
+  auto buffer = qalloc(2);
+  qcmx->execute(buffer);
+  auto map =
+      buffer->getInformation("energies").as<std::map<std::string, double>>();
+
+  EXPECT_NEAR(-1.14499, map["PDS(2)"], 1e-3);
+
+}
+
 int main(int argc, char **argv) {
   xacc::Initialize(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);

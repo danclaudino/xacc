@@ -12,8 +12,8 @@
  ******************************************************************************/
 #include "qeom.hpp"
 
-#include "Observable.hpp"
-#include "Utils.hpp"
+//#include "Observable.hpp"
+//#include "Utils.hpp"
 #include "xacc.hpp"
 #include "xacc_service.hpp"
 #include "xacc_plugin.hpp"
@@ -25,6 +25,7 @@
 #include <Eigen/Eigenvalues>
 #include <memory>
 #include <sstream>
+#include <fstream>
 #include <vector>
 #include "OperatorPool.hpp"
 
@@ -112,10 +113,6 @@ bool qEOM::initialize(const HeterogeneousMap &parameters) {
     observable = std::dynamic_pointer_cast<Observable>(pauliObservable);
   }
 
-  if (parameters.keyExists<bool>("compute-deexcitations")) {
-    computeDeexcitations = parameters.get<bool>("compute-deexcitations");
-  }
-
   return true;
 }
 
@@ -149,7 +146,6 @@ void qEOM::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   // loop over bra
   int nOperators = operators.size();
   std::vector<std::shared_ptr<Observable>> matElementOps;
-
   for (int i = 0; i < nOperators; i++) {
 
     auto tmp_bra = (*std::dynamic_pointer_cast<PauliOperator>(operators[i]))
@@ -170,23 +166,30 @@ void qEOM::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       // qEOM matrix elements
       // first the diagonal blocks
       auto M_MatOperator = doubleCommutator(bra, ket);
+      getUniqueTerms(M_MatOperator);
       matElementOps.push_back(M_MatOperator);
+
       auto V_MatOperator = bra->commutator(ket);
+      getUniqueTerms(V_MatOperator);
       matElementOps.push_back(V_MatOperator);
 
       // off-diagonal blocks
-      // only if computing de-excitations
-      if (computeDeexcitations) {
-        auto Q_MatOperator = doubleCommutator(bra, ketConj);
-        matElementOps.push_back(Q_MatOperator);
-        auto W_MatOperator = bra->commutator(ketConj);
-        matElementOps.push_back(W_MatOperator);
-      }
+
+      auto Q_MatOperator = doubleCommutator(bra, ketConj);
+      getUniqueTerms(Q_MatOperator);
+      matElementOps.push_back(Q_MatOperator);
+
+      auto W_MatOperator = bra->commutator(ketConj);
+      getUniqueTerms(W_MatOperator);
+      matElementOps.push_back(W_MatOperator);
     }
   }
 
   // call Observable::observe() and Accelerator::execute() only once
-  auto uniqueTermsPtr = getUniqueTerms(matElementOps);
+  auto uniqueTermsPtr = std::make_shared<PauliOperator>();
+  for (auto &termStr : uniqueTermsStrings) {
+    uniqueTermsPtr->operator+=(PauliOperator(termStr));
+  }
   auto kernels = uniqueTermsPtr->observe(xacc::as_shared_ptr(kernel));
   accelerator->execute(buffer, kernels);
   auto buffers = buffer->getChildren();
@@ -206,13 +209,11 @@ void qEOM::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       V(i, j) = computeOperatorExpValue(matElementOps[counter++], buffers);
       V(j, i) = V(i, j);
 
-      if (computeDeexcitations) {
-        Q(i, j) = computeOperatorExpValue(matElementOps[counter++], buffers);
-        Q(j, i) = Q(i, j);
+      Q(i, j) = computeOperatorExpValue(matElementOps[counter++], buffers);
+      Q(j, i) = Q(i, j);
 
-        W(i, j) = computeOperatorExpValue(matElementOps[counter++], buffers);
-        W(j, i) = W(i, j);
-      }
+      W(i, j) = computeOperatorExpValue(matElementOps[counter++], buffers);
+      W(j, i) = W(i, j);
     }
   }
 
@@ -223,20 +224,16 @@ void qEOM::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   // | Q^ M^ |
   MQ.topLeftCorner(nOperators, nOperators) = M;
   MQ.bottomRightCorner(nOperators, nOperators) = M.adjoint();
-  if (computeDeexcitations) {
-    MQ.topRightCorner(nOperators, nOperators) = Q;
-    MQ.bottomLeftCorner(nOperators, nOperators) = Q.adjoint();
-  }
+  MQ.topRightCorner(nOperators, nOperators) = Q;
+  MQ.bottomLeftCorner(nOperators, nOperators) = Q.adjoint();
 
   // RHS matrix
   // |  V    W  |
   // | -V^  -W^ |
   VW.topLeftCorner(nOperators, nOperators) = V;
   VW.bottomRightCorner(nOperators, nOperators) = -V.adjoint();
-  if (computeDeexcitations) {
-    VW.topRightCorner(nOperators, nOperators) = W;
-    VW.bottomLeftCorner(nOperators, nOperators) = -W.adjoint();
-  }
+  VW.topRightCorner(nOperators, nOperators) = W;
+  VW.bottomLeftCorner(nOperators, nOperators) = -W.adjoint();
 
   // Compute eigenvalues
   // | M  Q  | |X| = E |  V    W  | |X|
@@ -264,45 +261,6 @@ void qEOM::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   return;
 }
 
-std::shared_ptr<Observable> qEOM::getUniqueTerms(
-    const std::vector<std::shared_ptr<Observable>> excitationOps) const {
-
-  // loop over all operators and all terms for each operator
-  // then check if that operator has been added to found
-  // and add it if not
-  // since each term is measured separately, we can have an operator
-  // that's the sum of all unique terms
-  auto uniqueTermsPtr = std::make_shared<PauliOperator>();
-  for (auto &op : excitationOps) {
-    for (auto &subTerm : op->getNonIdentitySubTerms()) {
-
-      auto term1 = std::dynamic_pointer_cast<PauliOperator>(subTerm)->begin();
-      if (!uniqueTermsPtr->getNonIdentitySubTerms().empty()) {
-
-        for (auto uniqueTerm : uniqueTermsPtr->getNonIdentitySubTerms()) {
-          auto term2 =
-              std::dynamic_pointer_cast<PauliOperator>(uniqueTerm)->begin();
-
-          if (term1->second.id() == term2->second.id()) {
-            continue;
-          } else {
-            uniqueTermsPtr->operator+=(
-                *std::make_shared<PauliOperator>(term1->second.ops()));
-            break;
-          }
-
-        }
-
-      } else {
-        uniqueTermsPtr->operator+=(
-            *std::make_shared<PauliOperator>(term1->second.ops()));
-      }
-    }
-  }
-
-  return uniqueTermsPtr;
-}
-
 double qEOM::computeOperatorExpValue(
     const std::shared_ptr<Observable> &excitationOp,
     const std::vector<std::shared_ptr<AcceleratorBuffer>> &buffers) const {
@@ -321,6 +279,21 @@ double qEOM::computeOperatorExpValue(
   }
 
   return expval;
+}
+
+void qEOM::getUniqueTerms(
+    const std::shared_ptr<Observable> &matElemOp) const {
+
+  for (auto subTerm : matElemOp->getNonIdentitySubTerms()) {
+
+    auto termName =
+        std::dynamic_pointer_cast<PauliOperator>(subTerm)->begin()->first;
+    if (!xacc::container::contains(uniqueTermsStrings, termName)) {
+      uniqueTermsStrings.push_back(termName);
+    }
+  }
+
+  return;
 }
 
 } // namespace algorithm

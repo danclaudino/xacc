@@ -11,6 +11,7 @@
  *   Alexander J. McCaskey - initial API and implementation
  *******************************************************************************/
 #include "qcmx.hpp"
+#include "pds_vqs.hpp"
 
 #include "cppmicroservices/BundleActivator.h"
 #include "cppmicroservices/BundleContext.h"
@@ -35,6 +36,9 @@ public:
   void Start(BundleContext context) {
     auto c = std::make_shared<xacc::algorithm::QCMX>();
     context.RegisterService<xacc::Algorithm>(c);
+
+    auto p = std::make_shared<xacc::algorithm::PDS_VQS>();
+    context.RegisterService<xacc::Algorithm>(p);
   }
 
   /**

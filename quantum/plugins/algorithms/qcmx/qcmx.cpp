@@ -12,6 +12,7 @@
  ******************************************************************************/
 #include "qcmx.hpp"
 #include "ObservableTransform.hpp"
+#include "Utils.hpp"
 #include "xacc.hpp"
 #include "xacc_service.hpp"
 #include "PauliOperator.hpp"
@@ -97,6 +98,7 @@ void QCMX::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
   // First gather the operators for all required moments
   std::vector<std::shared_ptr<Observable>> momentOperators;
+  momentOperators.reserve(2 * maxOrder - 1);
   auto momentOperator = PauliOperator("I");
   for (int i = 0; i < 2 * maxOrder - 1; i++) {
     momentOperator *= (*std::dynamic_pointer_cast<PauliOperator>(observable));
@@ -308,21 +310,23 @@ double QCMX::Soldatov(const std::vector<double> &moments) const {
 std::shared_ptr<Observable> QCMX::getUniqueTerms(
     const std::vector<std::shared_ptr<Observable>> momentOps) const {
 
-  auto uniqueTermsPtr = std::make_shared<PauliOperator>();
+  std::vector<std::string> uniqueTermsStrings;
   for (auto &momentOp : momentOps) {
-    for (auto &term : momentOp->getNonIdentitySubTerms()) {
+    for (auto &subTerm : momentOp->getNonIdentitySubTerms()) {
 
-      auto op =
-          std::dynamic_pointer_cast<PauliOperator>(term)->begin()->second.ops();
-      auto coeff = std::dynamic_pointer_cast<PauliOperator>(term)
-                       ->begin()
-                       ->second.coeff();
-      if (std::fabs(coeff.real()) < threshold)
-        continue;
-      uniqueTermsPtr->operator+=(*std::make_shared<PauliOperator>(op));
+      if (!xacc::container::contains(uniqueTermsStrings, subTerm->toString())) {
+
+        if (std::fabs(subTerm->coefficient().real()) > threshold) {
+          uniqueTermsStrings.push_back(subTerm->toString());
+        }
+      }
     }
   }
 
+  auto uniqueTermsPtr = std::make_shared<PauliOperator>();
+  for (auto &pauliStr : uniqueTermsStrings) {
+    uniqueTermsPtr->operator+=(*std::make_shared<PauliOperator>(pauliStr));
+  }
   return uniqueTermsPtr;
 }
 
@@ -339,12 +343,12 @@ std::vector<double> QCMX::getMoments(
     }
 
     for (auto subTerm : momentOperators[i]->getNonIdentitySubTerms()) {
-      auto term =
-          std::dynamic_pointer_cast<PauliOperator>(subTerm)->begin()->second;
+      auto termName =
+          std::dynamic_pointer_cast<PauliOperator>(subTerm)->begin()->first;
 
       for (auto buffer : buffers) {
-        if (buffer->name() == term.id()) {
-          expval += std::real(term.coeff() * buffer->getExpectationValueZ());
+        if (buffer->name() == termName) {
+          expval += std::real(subTerm->coefficient() * buffer->getExpectationValueZ());
           break;
         }
       }

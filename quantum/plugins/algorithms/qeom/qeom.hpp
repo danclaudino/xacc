@@ -24,6 +24,7 @@
 
 #include "Algorithm.hpp"
 #include "xacc.hpp"
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -35,14 +36,14 @@ protected:
   CompositeInstruction *kernel;
   Accelerator *accelerator;
   HeterogeneousMap parameters;
-  bool computeDeexcitations = true;
   std::vector<std::shared_ptr<Observable>> operators;
+  mutable std::vector<std::string> uniqueTermsStrings;
 
-  std::shared_ptr<Observable>
-  getUniqueTerms(const std::vector<std::shared_ptr<Observable>>) const;
   double computeOperatorExpValue(
       const std::shared_ptr<Observable> &,
       const std::vector<std::shared_ptr<AcceleratorBuffer>> &) const;
+
+  void getUniqueTerms(const std::shared_ptr<Observable> &) const;
 
 public:
   bool initialize(const HeterogeneousMap &parameters) override;

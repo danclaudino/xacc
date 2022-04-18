@@ -209,18 +209,16 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   }
 
   // Gather all unique commutator terms
-  std::map<std::string, std::shared_ptr<Observable>> uniqueCommutatorTerms;
+  std::vector<std::string> uniqueCommutatorTerms;
   for (auto &commutator : commutators) {
 
     for (auto &term : commutator->getSubTerms()) {
-
       auto termName = std::dynamic_pointer_cast<PauliOperator>(term)
                           ->getTerms()
                           .begin()
                           ->first;
-
-      if (uniqueCommutatorTerms.find(termName) == uniqueCommutatorTerms.end()) {
-        uniqueCommutatorTerms[termName] = term;
+      if (!xacc::container::contains(uniqueCommutatorTerms, termName)) {
+        uniqueCommutatorTerms.push_back(termName);
       }
     }
   }
@@ -257,30 +255,17 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
     }
 
     // observe each term with the current ansatz
-    std::vector<std::shared_ptr<CompositeInstruction>> observedKernels;
-    for (auto &term : uniqueCommutatorTerms) {
-
-      std::vector<std::shared_ptr<CompositeInstruction>> termObservedKernel;
-      if (x.empty()) {
-        termObservedKernel = term.second->observe(ansatz);
-      } else {
-        auto tmp_x = x;
-        std::reverse(tmp_x.begin(), tmp_x.end());
-        auto evaled = ansatz->operator()(tmp_x);
-        termObservedKernel = term.second->observe(evaled);
-      }
-      observedKernels.insert(observedKernels.end(), termObservedKernel.begin(),
-                             termObservedKernel.end());
+    auto uniqueCommutatorTermsPtr = std::make_shared<PauliOperator>();
+    for (auto &pauliStr : uniqueCommutatorTerms) {
+      uniqueCommutatorTermsPtr->operator+=(PauliOperator(pauliStr));
     }
+    auto evaled = ansatz->operator()(x);
+    auto observedKernels = uniqueCommutatorTermsPtr->observe(evaled);
 
     // execute all unique terms
     auto tmpBuffer = xacc::qalloc(buffer->size());
     accelerator->execute(tmpBuffer, observedKernels);
-
-    std::map<std::string, std::shared_ptr<AcceleratorBuffer>> termToBuffer;
-    for (auto &buffer : tmpBuffer->getChildren()) {
-      termToBuffer[buffer->name()] = buffer;
-    }
+    auto buffers = tmpBuffer->getChildren();
 
     int maxCommutatorIdx = 0;
     double maxCommutator = 0.0, gradientNorm = 0.0;
@@ -289,13 +274,15 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
     for (int operatorIdx = 0; operatorIdx < commutators.size(); operatorIdx++) {
 
       double commutatorValue = 0.0;
-      for (auto &term : commutators[operatorIdx]->getNonIdentitySubTerms()) {
-        auto termName = std::dynamic_pointer_cast<PauliOperator>(term)
-                            ->getTerms()
-                            .begin()
-                            ->first;
-        commutatorValue += std::real(term->coefficient()) *
-                           termToBuffer[termName]->getExpectationValueZ();
+      for (auto &subTerm : commutators[operatorIdx]->getNonIdentitySubTerms()) {
+      auto term =
+          std::dynamic_pointer_cast<PauliOperator>(subTerm)->begin();
+
+        for (auto &b : buffers) {
+          if (b->name() == term->first) {
+            commutatorValue += std::real(subTerm->coefficient() * b->getExpectationValueZ());
+          }
+        }
       }
 
       // print commutator above threshold
