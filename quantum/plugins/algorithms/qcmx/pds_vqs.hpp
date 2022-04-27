@@ -32,13 +32,13 @@ protected:
   CompositeInstruction *kernel;
 
   // CMX order, also K in the paper
-  int maxOrder;
+  int order;
   // threshold below which we ignore measurement
   double threshold = 0.0;
   // x is the vector of parameters if the provided ansatz is parameterized
   std::vector<double> x;
   // spectrum is only for PDS
-  mutable std::vector<double> spectrum;
+  //mutable std::vector<double> spectrum;
   // store the matrices for gradients
   mutable Eigen::MatrixXd M;
   mutable Eigen::MatrixXd X;
@@ -49,7 +49,7 @@ protected:
                          const int bufferSize) const;
 
   // Compute energy from PDS CMX
-  double PDS(const std::vector<double> &moments, const int order) const;
+  std::vector<double> PDS(const std::vector<double> &moments) const;
 
   // get unique Pauli words
   std::shared_ptr<Observable>

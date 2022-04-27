@@ -63,7 +63,7 @@ bool PDS_VQS::initialize(const HeterogeneousMap &parameters) {
   }
 
   accelerator = parameters.getPointerLike<Accelerator>("accelerator");
-  maxOrder = parameters.get<int>("cmx-order");
+  order = parameters.get<int>("cmx-order");
   kernel = parameters.getPointerLike<CompositeInstruction>("ansatz");
 
   // check if Observable needs JW
@@ -99,10 +99,9 @@ const std::vector<std::string> PDS_VQS::requiredParameters() const {
 void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
   // First gather the operators for all required moments
-  std::vector<std::shared_ptr<Observable>> momentOperators;
-  momentOperators.reserve(2 * maxOrder - 1);
+  std::vector<std::shared_ptr<Observable>> momentOperators(2 * order - 1);
   auto momentOperator = PauliOperator("I");
-  for (int i = 0; i < 2 * maxOrder - 1; i++) {
+  for (int i = 0; i < 2 * order - 1; i++) {
     momentOperator *= (*std::dynamic_pointer_cast<PauliOperator>(observable));
     momentOperators.push_back(std::make_shared<PauliOperator>(momentOperator));
   }
@@ -117,69 +116,57 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   auto parameterShift = xacc::getGradient("parameter-shift");
   parameterShift->initialize({{"observable", uniqueTerms}});
   auto gradKernels = parameterShift->getGradientExecutions(xacc::as_shared_ptr(kernel), x);
-
   kernels.insert(kernels.end(), gradKernels.begin(), gradKernels.end());
 
+  // excecute
   accelerator->execute(buffer, kernels);
 
+  // keep track of buffers
   auto buffers = buffer->getChildren();
   auto energyBuffers = std::vector<std::shared_ptr<AcceleratorBuffer>>(buffers.begin(), buffers.begin() + nEnergyKernels);
   auto gradBuffers = std::vector<std::shared_ptr<AcceleratorBuffer>>(buffers.begin() + nEnergyKernels, buffers.end());
-  // compute moments
+
+  // compute moments and spectrum
   auto moments = computeMoments(momentOperators, energyBuffers);
+  auto spectrum = PDS(moments);
 
-  // the energies are stored in this map
-  std::map<std::string, double> energies;
-  for (int i = 2; i <= maxOrder; i++) {
+  // get ground state energy
+  auto energy = *std::min_element(spectrum.begin(), spectrum.end());
 
-    // The energy computation itself is just classical post processing
-    // So we can compute the energy from all implemented expansions
-    // because the bottleneck is the quantum computation of the moments
-    double e;
-    std::vector<double> momentsUpToOrder(moments.begin(),
-                                         moments.begin() + 2 * i - 1);
-    std::stringstream ss;
-    e = PDS(momentsUpToOrder, i / 2 + 1);
-    std::cout << e << "\n";
-    energies.emplace("PDS(" + std::to_string(i) + ")", e);
-    ss << std::setprecision(12) << "PDS(" << i << ") = " << e;
-    xacc::info(ss.str());
-    ss.str(std::string());
-  }
- 
-  // compute moments grads
-  Eigen::MatrixXd momentsGradients(x.size(), momentOperators.size());
-  momentsGradients = computeMomentsGradients(uniqueTerms, momentOperators, gradBuffers, x.size());
-  std::cout << "HERE5\n";
-  std::cout << spectrum << "\n";
-  // get denominator eq. 17
-  auto root = *std::min_element(spectrum.begin(), spectrum.end());
+  std::cout << energy << "\n";
   
   exit(0);
-  auto denominator = maxOrder * std::pow(root, maxOrder - 1);
-  Eigen::VectorXd polynomial(maxOrder - 1);
-  polynomial(maxOrder - 1) = 1.0;
-  for (auto i = 1; i < maxOrder; i++) {
-    denominator += (maxOrder - i) * X(i) * std::pow(root, maxOrder - i - 1);
-    polynomial(i - 1) = std::pow(root, maxOrder - i - 1);
+
+  // get vector that dot with dX/dx in eq. 17
+  auto denominator = order * std::pow(energy, order - 1);
+  Eigen::VectorXd polynomial(order - 1);
+  polynomial(order - 1) = 1.0;
+  for (auto i = 1; i < order; i++) {
+    denominator += (order - i) * X(i) * std::pow(energy, order - i - 1);
+    polynomial(i - 1) = std::pow(energy, order - i - 1);
   }
   polynomial /= denominator;
 
-  
+  // get moments gradients
+  // it is a matrix with params x moments
+  Eigen::MatrixXd momentsGradients(x.size(), momentOperators.size());
+  momentsGradients = computeMomentsGradients(uniqueTerms, momentOperators, gradBuffers, x.size());
+
+  // get the ground state energy gradient
   Eigen::VectorXd dE(x.size());
   for (int i = 0; i < x.size(); i++) {
 
     // get dM
     std::vector<double> gradMomentsParam(momentsGradients.row(i).data(), momentsGradients.row(i).data() + momentsGradients.row(i).size());
-    Eigen::MatrixXd dM(maxOrder, maxOrder);
+    Eigen::MatrixXd dM(order, order);
     dM = computeMatrixM(gradMomentsParam);
 
     // get dY
-    Eigen::VectorXd dY(maxOrder);
+    Eigen::VectorXd dY(order);
     dY = computeVectorY(gradMomentsParam);
 
     // get dX
-    Eigen::VectorXd dX(maxOrder);
+    Eigen::VectorXd dX(order);
     dX = M.colPivHouseholderQr().solve(-dY + dM * X).transpose();
 
     // get dE
@@ -187,12 +174,12 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
   }
 
+  // apply metric
 
 
 
 
   // add energy to the buffer
-  buffer->addExtraInfo("energies", energies);
   buffer->addExtraInfo("spectrum", spectrum);
   return;
 }
@@ -200,7 +187,7 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 // Compute energy from CMX
 // J. Phys. A: Math. Gen. 17, 625 (1984)
 // and Int. J. Mod. Phys. B 9, 2899 (1995)
-double PDS_VQS::PDS(const std::vector<double> &moments, const int order) const {
+std::vector<double> PDS_VQS::PDS(const std::vector<double> &moments) const {
 
   M = computeMatrixM(moments);
   Y = computeVectorY(moments);
@@ -226,13 +213,12 @@ double PDS_VQS::PDS(const std::vector<double> &moments, const int order) const {
   // get roots from eigenvalues
   // and return lowest energy eigenvalue
   Eigen::EigenSolver<Eigen::MatrixXd> es(companionMatrix);
-  spectrum.resize(order);
+  std::vector<double> spectrum(order);
   std::transform(es.eigenvalues().begin(), es.eigenvalues().end(),
                  spectrum.begin(),
                  [](std::complex<double> c) { return std::real(c); });
-  auto energy = *std::min_element(spectrum.begin(), spectrum.end());
 
-  return energy;
+  return spectrum;
 }
 
 std::shared_ptr<Observable> PDS_VQS::getUniqueTerms(
@@ -263,7 +249,7 @@ std::vector<double> PDS_VQS::computeMoments(
     const std::vector<std::shared_ptr<AcceleratorBuffer>> buffers) const {
 
   std::vector<double> moments;
-  for (int i = 0; i < 2 * maxOrder - 1; i++) {
+  for (int i = 0; i < 2 * order - 1; i++) {
     double expval = 0.0;
     if (momentOperators[i]->getIdentitySubTerm()) {
       expval +=
@@ -288,13 +274,13 @@ std::vector<double> PDS_VQS::computeMoments(
 
 Eigen::MatrixXd PDS_VQS::computeMatrixM(const std::vector<double> &moments) const {
 
-  Eigen::MatrixXd ret = Eigen::MatrixXd::Zero(maxOrder, maxOrder);
-  for (int i = 0; i < maxOrder; i++) {
-    for (int j = i; j < maxOrder; j++) {
-      if (i + j == 2 * (maxOrder - 1)) {
+  Eigen::MatrixXd ret = Eigen::MatrixXd::Zero(order, order);
+  for (int i = 0; i < order; i++) {
+    for (int j = i; j < order; j++) {
+      if (i + j == 2 * (order - 1)) {
         ret(i, j) = 1.0;
       } else {
-        ret(i, j) = moments[2 * maxOrder - (i + j) - 3];
+        ret(i, j) = moments[2 * order - (i + j) - 3];
       }
       ret(j, i) = ret(i, j);
     }
@@ -305,9 +291,9 @@ Eigen::MatrixXd PDS_VQS::computeMatrixM(const std::vector<double> &moments) cons
 
 Eigen::VectorXd PDS_VQS::computeVectorY(const std::vector<double> &moments) const {
 
-  Eigen::VectorXd ret = Eigen::VectorXd::Zero(maxOrder);
-  for (int i = 0; i < maxOrder; i++) {
-    ret(i) = moments[2 * maxOrder - i - 2];
+  Eigen::VectorXd ret = Eigen::VectorXd::Zero(order);
+  for (int i = 0; i < order; i++) {
+    ret(i) = moments[2 * order - i - 2];
   }
 
   return ret;
