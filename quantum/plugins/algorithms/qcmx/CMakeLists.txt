@@ -23,7 +23,7 @@ target_include_directories(
   ${LIBRARY_NAME}
   PUBLIC .)
 
-target_link_libraries(${LIBRARY_NAME} PUBLIC xacc CppMicroServices PRIVATE xacc-pauli)
+target_link_libraries(${LIBRARY_NAME} PUBLIC xacc CppMicroServices PRIVATE xacc-pauli xacc-quantum-gate)
 if (CMAKE_CXX_COMPILER_ID MATCHES "^(Apple)?Clang$")
   include(CheckSymbolExists)
   # Check for function std::beta

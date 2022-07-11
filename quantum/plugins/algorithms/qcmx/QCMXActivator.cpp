@@ -10,6 +10,7 @@
  * Contributors:
  *   Alexander J. McCaskey - initial API and implementation
  *******************************************************************************/
+#include "Optimizer.hpp"
 #include "qcmx.hpp"
 #include "pds_vqs.hpp"
 
@@ -39,6 +40,10 @@ public:
 
     auto p = std::make_shared<xacc::algorithm::PDS_VQS>();
     context.RegisterService<xacc::Algorithm>(p);
+  
+    auto o = std::make_shared<xacc::algorithm::RiemannianMetricOptimizer>();
+    context.RegisterService<xacc::Optimizer>(o);
+  
   }
 
   /**

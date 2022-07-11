@@ -12,6 +12,8 @@
  ******************************************************************************/
 #include <gtest/gtest.h>
 #include <memory>
+#include <vector>
+#include <iomanip>
 
 #include "xacc.hpp"
 #include "xacc_service.hpp"
@@ -22,9 +24,15 @@ using namespace xacc::quantum;
 
 TEST(QCMXTester, checkSimple) {
 
+
   auto H = xacc::quantum::getObservable(
       "pauli", std::string("0.2976 + 0.3593 Z0 - 0.4826 Z1 + 0.5818 Z0 Z1 + "
                            "0.0896 X0 X1 + 0.0896 Y0 Y1"));
+
+  auto sp_mat = H->to_sparse_matrix();
+    for (auto &s : sp_mat) {
+    std::cout << std::setprecision(12) << s.coeff() << ", " << s.row() << ", " << s.col() << "\n";
+  }
 
   auto provider = xacc::getService<xacc::IRProvider>("quantum");
   auto ansatz = provider->createComposite("initial-state");
@@ -43,12 +51,53 @@ TEST(QCMXTester, checkSimple) {
   auto map =
       buffer->getInformation("energies").as<std::map<std::string, double>>();
 
+std::cout <<  map["PDS(2)"] << "\n";
   EXPECT_NEAR(-1.14499, map["PDS(2)"], 1e-3);
   EXPECT_NEAR(-1.14517, map["CMX(2)"], 1e-3);
   EXPECT_NEAR(-1.14517, map["Knowles(2)"], 1e-3);
   EXPECT_NEAR(-1.14499, map["Soldatov"], 1e-3);
 }
 
+TEST(QCMXTester, checkHA) {
+
+  auto H = xacc::quantum::getObservable(
+      "pauli", std::string("1.5 + 0.5 Z1 - Z0 Z1"));
+
+  auto provider = xacc::getService<xacc::IRProvider>("quantum");
+  auto ansatz = provider->createComposite("initial-state");
+  ansatz->addVariables({"x0", "x1"});
+  ansatz->addInstruction(provider->createInstruction("Rx", {0}, {"x0"}));
+  ansatz->addInstruction(provider->createInstruction("CNOT", {0, 1}));
+  ansatz->addInstruction(provider->createInstruction("Ry", {1}, {"-x1"}));
+  ansatz->addInstruction(provider->createInstruction("CNOT", {0, 1}));
+  ansatz->addInstruction(provider->createInstruction("Ry", {1}, {"x1"}));
+
+  //std::cout << ansatz->toString() << "\n";
+
+  auto acc = xacc::getAccelerator("qsim");
+
+  auto qcmx = xacc::getService<xacc::Algorithm>("pds-vqs");
+
+  auto optimizer = xacc::getOptimizer("nlopt", {{"step", 0.05}, {"maxeval", 10}, {"algorithm", "l-bfgs"}, {"initial-parameters", std::vector<double>{xacc::constants::pi / 2.0, xacc::constants::pi / 4.0} }});
+
+  qcmx->initialize({{"accelerator", acc},
+                    {"observable", H},
+                    {"ansatz", ansatz},
+                    {"metric", "ITE"},
+                    {"optimizer", optimizer},
+                    {"cmx-order", 2}});
+
+  auto buffer = qalloc(2);
+  qcmx->execute(buffer);
+  auto map =
+      buffer->getInformation("opt-val").as<double>();
+
+    std::cout <<  map << "\n";
+  //EXPECT_NEAR(-1.14499, map["PDS(2)"], 1e-3);
+
+}
+
+/*
 TEST(QCMXTester, checkPDS_VQS) {
 
   auto H = xacc::quantum::getObservable(
@@ -80,7 +129,7 @@ TEST(QCMXTester, checkPDS_VQS) {
   EXPECT_NEAR(-1.14499, map["PDS(2)"], 1e-3);
 
 }
-
+*/
 int main(int argc, char **argv) {
   xacc::Initialize(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
