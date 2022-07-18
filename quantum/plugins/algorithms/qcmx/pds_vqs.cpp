@@ -13,6 +13,7 @@
 #include "pds_vqs.hpp"
 #include "Eigen/src/Core/Matrix.h"
 #include "Eigen/src/Core/util/IndexedViewHelper.h"
+#include "Observable.hpp"
 #include "ObservableTransform.hpp"
 #include "Optimizer.hpp"
 #include "Utils.hpp"
@@ -20,6 +21,7 @@
 #include "xacc_service.hpp"
 #include "PauliOperator.hpp"
 #include "xacc_observable.hpp"
+#include "OperatorPool.hpp"
 
 #include <algorithm>
 #include <complex>
@@ -31,23 +33,6 @@
 #include <optional>
 
 using namespace xacc;
-namespace {
-std::optional<xacc::quantum::PauliOperator>
-getGenerator(const InstPtr &in_inst) {
-  if (in_inst->name() == "Rx") {
-    return xacc::quantum::PauliOperator({{in_inst->bits()[0], "X"}}, 0.5);
-  }
-  if (in_inst->name() == "Ry") {
-    return xacc::quantum::PauliOperator({{in_inst->bits()[0], "Y"}}, 0.5);
-  }
-  if (in_inst->name() == "Rz") {
-    return xacc::quantum::PauliOperator({{in_inst->bits()[0], "Z"}}, 0.5);
-  }
-
-  return std::nullopt;
-}
-} // namespace
-
 using namespace xacc::quantum;
 
 #ifdef _XACC_NO_STD_BETA
@@ -89,7 +74,7 @@ bool PDS_VQS::initialize(const HeterogeneousMap &parameters) {
 
   accelerator = parameters.getPointerLike<Accelerator>("accelerator");
   order = parameters.get<int>("cmx-order");
-  kernel = parameters.getPointerLike<CompositeInstruction>("ansatz");
+  initialState = parameters.getPointerLike<CompositeInstruction>("ansatz");
   optimizer = parameters.getPointerLike<Optimizer>("optimizer");
 
   // check if Observable needs JW
@@ -104,19 +89,26 @@ bool PDS_VQS::initialize(const HeterogeneousMap &parameters) {
   }
 
   if (parameters.keyExists<double>("threshold")) {
-    threshold = parameters.get<double>("threshold");
+    printThreshold = parameters.get<double>("threshold");
     xacc::info("Ignoring measurements with coefficient below = " +
-               std::to_string(threshold));
-  }
-
-  // metric
-  if (parameters.stringExists("metric")) {
-    metric = parameters.getString("metric");
+               std::to_string(printThreshold));
   }
 
   // this is if we want to optimize excited states
   if (parameters.keyExists<int>("n-roots")) {
     nRoots = parameters.get<int>("n-roots");
+  }
+
+  if (parameters.stringExists("pool")) {
+    poolName = parameters.getString("pool");
+  }
+
+  if (parameters.keyExists<int>("n-electrons")) {
+    nElectrons = parameters.get<int>("n-electrons");
+  }
+
+  if (parameters.keyExists<bool>("adapt")) {
+    adapt = parameters.get<bool>("adapt");
   }
 
   return true;
@@ -128,6 +120,9 @@ const std::vector<std::string> PDS_VQS::requiredParameters() const {
 
 void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
+  std::stringstream ss;
+  ss << std::setprecision(12);
+
   // First gather the operators for all required moments
   std::vector<std::shared_ptr<Observable>> momentOperators(2 * order - 1);
   auto momentOperator = PauliOperator("I");
@@ -136,41 +131,54 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
     momentOperators[i] = std::make_shared<PauliOperator>(momentOperator);
   }
 
+  auto provider = xacc::getIRProvider("quantum");
+  auto kernel = provider->createComposite("ansatz");
+  if (initialState->nVariables()) {
+    kernel->addVariables(initialState->getVariables());
+  }
+  for (auto &inst : initialState->getInstructions()) {
+    kernel->addInstruction(inst);
+  }
+
   // now get the unique terms in all moments operators
   auto uniqueTerms = getUniqueTerms(momentOperators);
 
   std::vector<double> optSpectrum(order);
   double optEnergy = 10000; // just some ridiculous number
 
+  // performance metrics
+  int nTotalCircuits = 0, nTotalMeasurements = 0;
   OptFunction f(
       [&, this](const std::vector<double> &x, std::vector<double> &dx) {
-
+        
         auto evaled = kernel->operator()(x);
         auto kernels = uniqueTerms->observe(evaled);
         auto nEnergyKernels = kernels.size();
 
         // now get circuits for gradients of unique terms
-        auto parameterShift = xacc::getGradient("parameter-shift");
-        parameterShift->initialize({{"observable", uniqueTerms}, {"shift-scalar", 0.5}});
-        auto gradKernels = parameterShift->getGradientExecutions(
-            xacc::as_shared_ptr(kernel), x);
+        int nGradKernels = 0;
+        if (optimizer->isGradientBased()) {
+          auto parameterShift = xacc::getGradient("parameter-shift");
+          parameterShift->initialize(
+              {{"observable", uniqueTerms}, {"shift-scalar", 0.5}});
+          auto gradKernels = parameterShift->getGradientExecutions(kernel, x);
 
-        auto nGradKernels = gradKernels.size();
-        kernels.insert(kernels.end(), gradKernels.begin(), gradKernels.end());
-
-        // get circuits for metric
-        auto nMetricKernels = 0;
-        if (optimizer->name() == "riemann" && metric != "GD") {
-          auto metricKernels =
-              getMetricCircuits(xacc::as_shared_ptr(kernel), x);
-          nMetricKernels = metricKernels.size();
-          kernels.insert(kernels.end(), metricKernels.begin(),
-                         metricKernels.end());
+          nGradKernels = gradKernels.size();
+          kernels.insert(kernels.end(), gradKernels.begin(), gradKernels.end());
         }
 
         // excecute all circuits
         auto tmpBuffer = qalloc(buffer->size());
         accelerator->execute(tmpBuffer, kernels);
+
+        nTotalCircuits += kernels.size();
+        for (auto &op : uniqueTerms->getNonIdentitySubTerms()) {
+          nTotalMeasurements += std::dynamic_pointer_cast<PauliOperator>(op)
+                                    ->getTerms()
+                                    .begin()
+                                    ->second.ops()
+                                    .size();
+        }
 
         // keep track of buffers
         auto buffers = tmpBuffer->getChildren();
@@ -180,40 +188,26 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
             buffers.begin() + nEnergyKernels,
             buffers.begin() + nEnergyKernels + nGradKernels);
 
-        std::vector<std::shared_ptr<AcceleratorBuffer>> metricBuffers(
-            nMetricKernels);
-        if (optimizer->name() == "riemann" && metric != "GD") {
-          metricBuffers = std::vector<std::shared_ptr<AcceleratorBuffer>>(
-              buffers.begin() + nEnergyKernels + nGradKernels, buffers.end());
-        }
-
         // compute moments and spectrum
         auto moments = computeMoments(momentOperators, energyBuffers);
         auto spectrum = PDS(moments);
 
         // get ground state energy
         auto energy = *std::min_element(spectrum.begin(), spectrum.end());
-        std::cout << "Energy: " << energy << "\n";
         if (energy < optEnergy) {
           optEnergy = energy;
           optSpectrum = spectrum;
         }
 
         // get denominator and derivative of the polynomial in eq. 17
-        auto denominator = -order * std::pow(energy, order - 1);
-        Eigen::VectorXd polynomialDerivative = Eigen::VectorXd::Zero(order);
-        polynomialDerivative(order - 1) = 1.0;
-        for (auto i = 0; i < order - 1; i++) {
-          denominator -= (order - i - 1) * X(i) * std::pow(energy, order - i - 2);
-          polynomialDerivative(i) = std::pow(energy, order - i - 1);
-        }
-        polynomialDerivative /= denominator;
+        Eigen::VectorXd polynomialDerivative =
+            getPolynomialDerivative(X, energy);
 
         // get moments gradients
         auto nParams = x.size();
         auto nTerms = uniqueTerms->getNonIdentitySubTerms().size();
-        auto momentsGradients = computeMomentsGradients(momentOperators,
-                                                   gradBuffers, nTerms, nParams);
+        auto momentsGradients = computeMomentsGradients(
+            momentOperators, gradBuffers, nTerms, nParams);
 
         // get the ground state energy gradient
         Eigen::VectorXd dE = Eigen::VectorXd::Zero(nParams);
@@ -224,10 +218,9 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
           // get dM
           Eigen::MatrixXd dM(order, order);
-          dM = computeMatrixM(gradMomentsParam);
+          dM = computeMatrixM(gradMomentsParam, true);
           // M(order, order) = <trial|trial> = 1
           // so it has no angle dependence, thus its derivative is 0
-          dM(order - 1, order - 1) = 0.0;
 
           // get dY
           Eigen::VectorXd dY(order);
@@ -241,36 +234,197 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
           dE(i) = polynomialDerivative.dot(dX);
         }
 
-        if (optimizer->name() != "riemann") {
-          dx = std::vector<double>(dE.data(), dE.data() + dE.size());
-          std::cout << "x = " << x << " dx =" << dx << "\n";
-          return optEnergy;
-        }
-
-        if (metric == "GD") {
-          dx = std::vector<double>(dE.data(), dE.data() + dE.size());
-        } else {
-   
-          Eigen::MatrixXd metricMatrix(nParams, nParams);
-          metricMatrix = constructMetricTensorMatrix(metricBuffers, nParams);
-          Eigen::VectorXd new_dx(nParams);
-          new_dx = metricMatrix.colPivHouseholderQr().solve(dE).transpose();
-
-          optimizer->appendOption(
-              "new-dx", std::vector<double>(new_dx.data(),
-                                             new_dx.data() + new_dx.size()));
-          dx = std::vector<double>(new_dx.data(), new_dx.data() + new_dx.size());
-        }
+        dx = std::vector<double>(dE.data(), dE.data() + dE.size());
+        ss << "PDS-VQS(" << order << "): " << energy << "\t dx: " << dx << "\n";
+        xacc::info(ss.str());
+        ss.str(std::string());
 
         return energy;
       },
       kernel->nVariables());
 
-  auto result = optimizer->optimize(f);
-  // add energy to the buffer
-  buffer->addExtraInfo("spectrum", optSpectrum);
-  buffer->addExtraInfo("opt-val", ExtraInfo(result.first));
-  buffer->addExtraInfo("opt-params", ExtraInfo(result.second));
+  if (!adapt) {
+
+    auto result = optimizer->optimize(f);
+    buffer->addExtraInfo("spectrum", optSpectrum);
+    buffer->addExtraInfo("opt-val", ExtraInfo(result.first));
+    buffer->addExtraInfo("opt-params", ExtraInfo(result.second));
+
+    ss << "Total number of circuit implementations: " << nTotalCircuits;
+    xacc::info(ss.str());
+    ss.str(std::string());
+
+    ss << "Total number of measurements: " << nTotalMeasurements;
+    xacc::info(ss.str());
+    ss.str(std::string());
+
+  } else {
+
+    // get operator pool
+    auto pool = xacc::getService<OperatorPool>(poolName);
+    pool->optionalParameters({{"n-electrons", nElectrons}});
+    auto operators = pool->generate(buffer->size());
+
+    // get operator for moments gradients
+    std::vector<std::shared_ptr<Observable>> commutators;
+    for (auto &op : operators) {
+      for (auto &momentOperator : momentOperators) {
+        commutators.push_back(momentOperator->commutator(op));
+      }
+    }
+
+    // get unique terms for gradients
+    std::vector<std::shared_ptr<Observable>> uniqueGradientStrings(commutators);
+    uniqueGradientStrings.insert(uniqueGradientStrings.end(),
+                                 momentOperators.begin(),
+                                 momentOperators.end());
+    auto uniqueStringsPtr = getUniqueTerms(uniqueGradientStrings);
+    auto nUniqueStrings = uniqueStringsPtr->getNonIdentitySubTerms().size();
+
+    auto nMeasurements = 0;
+    for (auto &op : uniqueStringsPtr->getNonIdentitySubTerms()) {
+      nMeasurements += std::dynamic_pointer_cast<PauliOperator>(op)
+                           ->getTerms()
+                           .begin()
+                           ->second.ops()
+                           .size();
+    }
+
+    // start adapt
+    std::vector<double> x;
+    double oldEnergy = 0.0;
+    for (int iter = 0; iter < 50; iter++) {
+
+      // observe unique strings for current ansatz
+      auto evaled = kernel->operator()(x);
+      auto observedKernels = uniqueStringsPtr->observe(evaled);
+      nTotalMeasurements += nMeasurements;
+      nTotalCircuits += observedKernels.size();
+
+      // execute all unique terms
+      auto tmpBuffer = qalloc(buffer->size());
+      accelerator->execute(tmpBuffer, observedKernels);
+      auto buffers = tmpBuffer->getChildren();
+
+      // solve PDS for the current ansatz
+      auto currentMoments = computeMoments(momentOperators, buffers);
+      auto spectrum = PDS(currentMoments);
+      auto energy = *std::min_element(spectrum.begin(), spectrum.end());
+      Eigen::VectorXd polynomialDerivative = getPolynomialDerivative(X, energy);
+
+      // get gradients
+      auto begin = commutators.begin();
+      int maxGradientIdx = 0;
+      double maxGradient = 0.0, gradientNorm = 0.0;
+      for (int i = 0; i < operators.size(); i++) {
+
+        auto momentsGradientOperator = std::vector<std::shared_ptr<Observable>>(
+            begin, begin + 2 * order - 1);
+        auto momentsGradient = computeMoments(momentsGradientOperator, buffers);
+        begin += 2 * order - 1;
+
+        // get matrices/vectors for commutators
+        Eigen::MatrixXd gradientM = computeMatrixM(momentsGradient, true);
+        Eigen::VectorXd gradientY = computeVectorY(momentsGradient);
+        Eigen::VectorXd gradientX = M.colPivHouseholderQr()
+                                        .solve(-gradientY - gradientM * X)
+                                        .transpose();
+        auto gradient = polynomialDerivative.dot(gradientX);
+
+        // print gradient elements above threshold
+        if (abs(gradient) > printThreshold) {
+          ss << "dE/dt" << i << " = " << gradient;
+          xacc::info(ss.str());
+          ss.str(std::string());
+        }
+
+        // update max gradient
+        if (abs(gradient) > abs(maxGradient)) {
+          maxGradientIdx = i;
+          maxGradient = gradient;
+        }
+
+        gradientNorm += gradient * gradient;
+      }
+
+      ss << "Max gradient component: [H, " << maxGradientIdx
+         << "] = " << maxGradient << " a.u.";
+      xacc::info(ss.str());
+      ss.str(std::string());
+
+      gradientNorm = std::sqrt(gradientNorm);
+      ss << "Norm of gradient vector: " << gradientNorm << " a.u.";
+      xacc::info(ss.str());
+      ss.str(std::string());
+
+      if (gradientNorm < 0.01) {
+        ss << "Converged!";
+        xacc::info(ss.str());
+        ss.str(std::string());
+
+        ss << "Total number of circuit implementations: " << nTotalCircuits;
+        xacc::info(ss.str());
+        ss.str(std::string());
+
+        ss << "Total number of measurements: " << nTotalMeasurements;
+        xacc::info(ss.str());
+        ss.str(std::string());
+
+        ss << "Depth of final circuit: " << kernel->depth();
+        xacc::info(ss.str());
+        ss.str(std::string());
+
+        return;
+
+      } else {
+
+        auto maxGradientGate =
+            pool->getOperatorInstructions(maxGradientIdx, kernel->nVariables());
+        kernel->addVariable("x" + std::to_string(kernel->nVariables()));
+        for (auto &inst : maxGradientGate->getInstructions()) {
+          kernel->addInstruction(inst);
+        }
+        x.push_back(0.0);
+
+        optimizer->appendOption("initial-parameters", x);
+        auto result = optimizer->optimize(f);
+
+        auto newEnergy = result.first;
+        oldEnergy = newEnergy;
+        ss << "Energy at ADAPT iteration " << iter + 1 << ": " << newEnergy;
+        xacc::info(ss.str());
+        ss.str(std::string());
+
+        x = result.second;
+        ss << "Parameters at ADAPT iteration " << iter + 1 << ": ";
+        for (auto param : x) {
+          ss << param << " ";
+        }
+        xacc::info(ss.str());
+        ss.str(std::string());
+
+        ss << "Circuit depth at ADAPT iteration " << iter + 1 << ": "
+           << kernel->depth();
+        xacc::info(ss.str());
+        ss.str(std::string());
+
+        ss << "Number of circuit implementations at ADAPT iteration "
+           << iter + 1 << ": " << nTotalCircuits;
+        xacc::info(ss.str());
+        ss.str(std::string());
+
+        ss << "Number of measurements at ADAPT iteration " << iter + 1 << ": "
+           << nTotalMeasurements;
+        xacc::info(ss.str());
+        ss.str(std::string());
+
+        buffer->addExtraInfo("spectrum", optSpectrum);
+        buffer->addExtraInfo("opt-val", ExtraInfo(result.first));
+        buffer->addExtraInfo("opt-params", ExtraInfo(result.second));
+      }
+    }
+  }
+
   return;
 }
 
@@ -279,7 +433,7 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 // and Int. J. Mod. Phys. B 9, 2899 (1995)
 std::vector<double> PDS_VQS::PDS(const std::vector<double> &moments) const {
 
-  M = computeMatrixM(moments);
+  M = computeMatrixM(moments, false);
   Eigen::VectorXd Y(order);
   Y = computeVectorY(moments);
 
@@ -362,14 +516,14 @@ std::vector<double> PDS_VQS::computeMoments(
   return moments;
 }
 
-Eigen::MatrixXd
-PDS_VQS::computeMatrixM(const std::vector<double> &moments) const {
+Eigen::MatrixXd PDS_VQS::computeMatrixM(const std::vector<double> &moments,
+                                        const bool gradient) const {
 
   Eigen::MatrixXd ret = Eigen::MatrixXd::Zero(order, order);
   for (int i = 0; i < order; i++) {
     for (int j = i; j < order; j++) {
       if (i + j == 2 * (order - 1)) {
-        ret(i, j) = 1.0;
+        ret(i, j) = gradient ? 0.0 : 1.0;
       } else {
         ret(i, j) = moments[2 * order - (i + j) - 3];
       }
@@ -391,6 +545,22 @@ PDS_VQS::computeVectorY(const std::vector<double> &moments) const {
   return ret;
 }
 
+Eigen::VectorXd PDS_VQS::getPolynomialDerivative(const Eigen::VectorXd X,
+                                                 const double energy) const {
+
+  // get denominator and derivative of the polynomial in eq. 17
+  auto denominator = -order * std::pow(energy, order - 1);
+  Eigen::VectorXd polynomialDerivative = Eigen::VectorXd::Zero(order);
+  polynomialDerivative(order - 1) = 1.0;
+  for (auto i = 0; i < order - 1; i++) {
+    denominator -= (order - i - 1) * X(i) * std::pow(energy, order - i - 2);
+    polynomialDerivative(i) = std::pow(energy, order - i - 1);
+  }
+  polynomialDerivative /= denominator;
+
+  return polynomialDerivative;
+}
+
 std::vector<std::vector<double>> PDS_VQS::computeMomentsGradients(
     const std::vector<std::shared_ptr<Observable>> momentOperators,
     const std::vector<std::shared_ptr<AcceleratorBuffer>> buffers,
@@ -406,14 +576,14 @@ std::vector<std::vector<double>> PDS_VQS::computeMomentsGradients(
       auto termName = buffers[termIdx + 2 * paramIdx * nTerms]->name();
       auto termGrad =
           (buffers[termIdx + 2 * paramIdx * nTerms]->getExpectationValueZ() -
-           buffers[termIdx + (2 * paramIdx + 1) * nTerms]->getExpectationValueZ()) /
+           buffers[termIdx + (2 * paramIdx + 1) * nTerms]
+               ->getExpectationValueZ()) /
           2.0;
       paramUniqueTermGrad[termIdx] = {termName, termGrad};
-
     }
 
     std::vector<double> momentsGradientsParams(momentOperators.size());
-    for (int m = 0; m < 2 * order -1; m++) {
+    for (int m = 0; m < 2 * order - 1; m++) {
 
       double momentGrad = 0.0;
       for (auto &subTerm : momentOperators[m]->getNonIdentitySubTerms()) {
@@ -428,7 +598,6 @@ std::vector<std::vector<double>> PDS_VQS::computeMomentsGradients(
             break;
           }
         }
-
       }
 
       momentsGradientsParams[m] = momentGrad;
@@ -437,349 +606,6 @@ std::vector<std::vector<double>> PDS_VQS::computeMomentsGradients(
     momentsGradients.push_back(momentsGradientsParams);
   }
   return momentsGradients;
-}
-
-ObservedKernels
-PDS_VQS::getMetricCircuits(std::shared_ptr<CompositeInstruction> in_circuit,
-                           const std::vector<double> &in_x) const {
-
-  // Layering the circuit:
-  m_layers = ParametrizedCircuitLayer::toParametrizedLayers(in_circuit);
-  auto m_nbParams = in_x.size();
-  std::vector<std::string> paramNames;
-  assert(in_circuit->getVariables().size() == in_x.size());
-  for (const auto &param : in_circuit->getVariables()) {
-    paramNames.emplace_back(param);
-  }
-
-  std::vector<std::shared_ptr<CompositeInstruction>> metricTensorKernels;
-  for (auto &layer : m_layers) {
-    auto kernels = constructMetricTensorSubCircuit(layer, paramNames, in_x);
-
-    // Insert *non-identity* kernels only
-    size_t kernelIdx = 0;
-    const auto isIdentityTerm = [](xacc::quantum::PauliOperator &in_pauli) {
-      return in_pauli.getNonIdentitySubTerms().size() == 0;
-    };
-
-    //if (metric == "NGD") {
-      for (size_t i = 0; i < layer.kiTerms.size(); ++i) {
-        if (!isIdentityTerm(layer.kiTerms[i])) {
-          metricTensorKernels.emplace_back(kernels[kernelIdx]);
-          m_metricTermToIdx.emplace(layer.kiTerms[i].toString(),
-                                    metricTensorKernels.size() - 1);
-        }
-        kernelIdx++;
-      //}
-    }
-
-    for (size_t i = 0; i < layer.kikjTerms.size(); ++i) {
-      if (!isIdentityTerm(layer.kikjTerms[i])) {
-        metricTensorKernels.emplace_back(kernels[kernelIdx]);
-        m_metricTermToIdx.emplace(layer.kikjTerms[i].toString(),
-                                  metricTensorKernels.size());
-      }
-      kernelIdx++;
-    }
-  }
-
-  return metricTensorKernels;
-}
-
-ObservedKernels PDS_VQS::constructMetricTensorSubCircuit(
-    ParametrizedCircuitLayer &io_layer,
-    const std::vector<std::string> &in_varNames,
-    const std::vector<double> &in_varVals) const {
-
-  assert(in_varNames.size() == in_varVals.size());
-  // We need to observe all the generators of parametrized gates plus products
-  // of them.
-  std::vector<xacc::quantum::PauliOperator> KiTerms;
-  std::vector<xacc::quantum::PauliOperator> KiKjTerms;
-
-  for (const auto &parOp : io_layer.ops) {
-    auto opGenerator = getGenerator(parOp);
-    assert(opGenerator.has_value());
-    KiTerms.emplace_back(opGenerator.value());
-  }
-
-  for (const auto &genOp1 : KiTerms) {
-    for (const auto &genOp2 : KiTerms) {
-      auto kikjOp = genOp1 * genOp2;
-      assert(kikjOp.nTerms() == 1);
-      KiKjTerms.emplace_back(kikjOp);
-    }
-  }
-
-  auto gateRegistry = xacc::getService<IRProvider>("quantum");
-  auto circuitToObs = gateRegistry->createComposite("__LAYER__COMPOSITE__");
-  std::vector<std::shared_ptr<xacc::CompositeInstruction>> obsComp;
-  std::vector<double> resolvedParams;
-  for (const auto &op : io_layer.preOps) {
-    if (op->isParameterized() && op->getParameter(0).isVariable()) {
-      const auto varName = op->getParameter(0).as<std::string>();
-      circuitToObs->addVariable(varName);
-      const auto iter =
-          std::find(in_varNames.begin(), in_varNames.end(), varName);
-      assert(iter != in_varNames.end());
-      const size_t idx = std::distance(in_varNames.begin(), iter);
-      assert(idx < in_varVals.size());
-      resolvedParams.emplace_back(in_varVals[idx]);
-    }
-  }
-
-  circuitToObs->addInstructions(io_layer.preOps);
-  // Resolves the pre-ops now that we have passed that layer.
-  auto resolvedCirc = resolvedParams.empty()
-                          ? circuitToObs
-                          : circuitToObs->operator()(resolvedParams);
-
-  size_t NUM_KI_TERMS = 0;
-  size_t NUM_KIKJ_TERMS = 0;
-  //if (metric == "NGD") {
-    io_layer.kiTerms = KiTerms;
-    for (auto &term : KiTerms) {
-      auto obsKernels = term.observe(resolvedCirc);
-      assert(obsKernels.size() == 1);
-      obsComp.emplace_back(obsKernels[0]);
-    }
-    NUM_KI_TERMS = io_layer.paramInds.size();
-  //}
-
-  io_layer.kikjTerms = KiKjTerms;
-  for (auto &term : KiKjTerms) {
-    auto obsKernels = term.observe(resolvedCirc);
-    assert(obsKernels.size() == 1);
-    obsComp.emplace_back(obsKernels[0]);
-  }
-  NUM_KIKJ_TERMS = io_layer.paramInds.size() * io_layer.paramInds.size();
-
-  // Validate the expected count.
-  assert(obsComp.size() == NUM_KI_TERMS + NUM_KIKJ_TERMS);
-  return obsComp;
-}
-
-Eigen::MatrixXd PDS_VQS::constructMetricTensorMatrix(
-    const std::vector<std::shared_ptr<xacc::AcceleratorBuffer>> &in_results,
-    const int nParams) const {
-
-  Eigen::MatrixXd gMat = Eigen::MatrixXd::Zero(nParams, nParams);
-  size_t blockIdx = 0;
-  const auto getExpectationForTerm =
-      [&](xacc::quantum::PauliOperator &in_pauli) {
-        if (m_metricTermToIdx.find(in_pauli.toString()) ==
-            m_metricTermToIdx.end()) {
-          return 1.0;
-        }
-        return in_results[m_metricTermToIdx[in_pauli.toString()]]
-            ->getExpectationValueZ();
-      };
-
-  for (auto &layer : m_layers) {
-
-    const auto nbParamsInBlock = layer.paramInds.size();
-    // Constructs the block diagonal matrices
-    Eigen::MatrixXd blockMat =
-        Eigen::MatrixXd::Zero(nbParamsInBlock, nbParamsInBlock);
-
-    for (size_t i = 0; i < nbParamsInBlock; ++i) {
-      for (size_t j = 0; j < nbParamsInBlock; ++j) {
-
-        // Entry = <KiKj> - <Ki><Kj>
-        // second_order_ev[i, j] - first_order_ev[i] * first_order_ev[j]
-
-        auto firstOrderTerm1 = layer.kiTerms[i];
-        auto firstOrderTerm2 = layer.kiTerms[j];
-        auto secondOrderTerm = layer.kiTerms[i] * layer.kiTerms[j];
-
-        const double factor1 = firstOrderTerm1.coefficient().real();
-        const double factor2 = firstOrderTerm2.coefficient().real();
-
-        const double secondOrderTermExp =
-            getExpectationForTerm(secondOrderTerm);
-        double value = secondOrderTermExp;
-
-        if (metric == "NGD") {
-          const double firstOrderTerm1Exp =
-              getExpectationForTerm(firstOrderTerm1);
-          const double firstOrderTerm2Exp =
-              getExpectationForTerm(firstOrderTerm2);
-          value -= firstOrderTerm1Exp * firstOrderTerm2Exp;
-        }
-
-        // const double value = factor1*factor2*(secondOrderTermExp -
-        // firstOrderTerm1Exp * firstOrderTerm2Exp);
-
-        blockMat(i, j) = factor1 * factor2 * value;
-      }
-    }
-
-    for (size_t i = 0; i < nbParamsInBlock; ++i) {
-      for (size_t j = 0; j < nbParamsInBlock; ++j) {
-        gMat(blockIdx + i, blockIdx + j) = blockMat(i, j);
-      }
-    }
-
-    blockIdx += nbParamsInBlock;
-  }
-
-  return gMat;
-}
-
-std::vector<ParametrizedCircuitLayer>
-ParametrizedCircuitLayer::toParametrizedLayers(
-    const std::shared_ptr<xacc::CompositeInstruction> &in_circuit) {
-  const auto variables = in_circuit->getVariables();
-  if (variables.empty()) {
-    xacc::error("Input circuit is not parametrized.");
-  }
-
-  // Assemble parametrized circuit layer:
-  std::vector<ParametrizedCircuitLayer> layers;
-  ParametrizedCircuitLayer currentLayer;
-  std::set<size_t> qubitsInLayer;
-  for (size_t instIdx = 0; instIdx < in_circuit->nInstructions(); ++instIdx) {
-    const auto &inst = in_circuit->getInstruction(instIdx);
-    if (!inst->isParameterized()) {
-      if (currentLayer.ops.empty()) {
-        currentLayer.preOps.emplace_back(inst);
-      } else {
-        currentLayer.postOps.emplace_back(inst);
-      }
-    } else {
-      const auto &instParam = inst->getParameter(0);
-      if (instParam.isVariable()) {
-        const auto varName = instParam.as<std::string>();
-        const auto iter =
-            std::find(variables.begin(), variables.end(), varName);
-        assert(iter != variables.end());
-        assert(inst->bits().size() == 1);
-        const auto bitIdx = inst->bits()[0];
-        // This qubit line was already acted upon in this layer by a
-        // parametrized gate. Hence, start a new layer.
-        if (!currentLayer.postOps.empty() ||
-            xacc::container::contains(qubitsInLayer, bitIdx)) {
-          assert(!currentLayer.ops.empty() && !currentLayer.paramInds.empty());
-          layers.emplace_back(std::move(currentLayer));
-          qubitsInLayer.clear();
-        }
-        currentLayer.ops.emplace_back(inst);
-        currentLayer.paramInds.emplace_back(
-            std::distance(iter, variables.begin()));
-        qubitsInLayer.emplace(bitIdx);
-      } else {
-        if (currentLayer.ops.empty()) {
-          currentLayer.preOps.emplace_back(inst);
-        } else {
-          currentLayer.postOps.emplace_back(inst);
-        }
-      }
-    }
-  }
-
-  assert(!currentLayer.ops.empty() && !currentLayer.paramInds.empty());
-  layers.emplace_back(std::move(currentLayer));
-
-  // Need to make a copy to do two rounds:
-  auto layersCopied = layers;
-
-  // Add pre-ops and post-ops:
-  for (size_t i = 1; i < layers.size(); ++i) {
-    // Pre-ops:
-    auto &thisLayerPreOps = layers[i].preOps;
-    const auto &previousLayerOps = layers[i - 1].ops;
-    const auto &previousLayerPreOps = layers[i - 1].preOps;
-    const auto &previousLayerPostOps = layers[i - 1].postOps;
-
-    // Insert pre-ops, ops, and *raw* post-ops of the previous layer to the
-    // begining
-    thisLayerPreOps.insert(thisLayerPreOps.begin(),
-                           previousLayerPostOps.begin(),
-                           previousLayerPostOps.end());
-    thisLayerPreOps.insert(thisLayerPreOps.begin(), previousLayerOps.begin(),
-                           previousLayerOps.end());
-    thisLayerPreOps.insert(thisLayerPreOps.begin(), previousLayerPreOps.begin(),
-                           previousLayerPreOps.end());
-  }
-
-  for (int i = layers.size() - 2; i >= 0; --i) {
-    // Post-ops:
-    auto &thisLayerPostOps = layers[i].postOps;
-    const auto &nextLayerOps = layers[i + 1].ops;
-    const auto &nextLayerPostOps = layers[i + 1].postOps;
-    // Get the original pre-ops
-    const auto &nextLayerPreOps = layersCopied[i + 1].preOps;
-
-    // Insert next layer pre-ops, ops and its post op
-    thisLayerPostOps.insert(thisLayerPostOps.end(), nextLayerPreOps.begin(),
-                            nextLayerPreOps.end());
-    thisLayerPostOps.insert(thisLayerPostOps.end(), nextLayerOps.begin(),
-                            nextLayerOps.end());
-    thisLayerPostOps.insert(thisLayerPostOps.end(), nextLayerPostOps.begin(),
-                            nextLayerPostOps.end());
-  }
-
-  // Verify:
-  for (const auto &layer : layers) {
-    assert(layer.preOps.size() + layer.ops.size() + layer.postOps.size() ==
-           in_circuit->nInstructions());
-    assert(!layer.paramInds.empty() && !layer.ops.empty());
-  }
-
-  return layers;
-}
-
-OptResult RiemannianMetricOptimizer::optimize(OptFunction &function) {
-  auto dim = function.dimensions();
-  double tol = 1e-6;
-  int maxeval = 1000;
-
-  std::vector<double> deltaX;
-  if (options.keyExists<std::vector<double>>("delta-x")) {
-    deltaX = options.get<std::vector<double>>("delta-x");
-  }
-
-  std::vector<double> x(dim, 0.0), dx(dim, 0.0);
-  x[0] = xacc::constants::pi / 2.0;
-
-  if (options.keyExists<std::vector<double>>("initial-parameters")) {
-    x = options.get_with_throw<std::vector<double>>("initial-parameters");
-  } else if (options.keyExists<std::vector<int>>("initial-parameters")) {
-    auto tmpx = options.get<std::vector<int>>("initial-parameters");
-    x = std::vector<double>(tmpx.begin(), tmpx.end());
-  }
-
-  if (options.keyExists<int>("maxeval")) {
-    maxeval = options.get<int>("maxeval");
-    xacc::info("max function evaluations set to " + std::to_string(maxeval));
-  }
-
-  double step = 0.05;
-  if (options.keyExists<double>("step")) {
-    maxeval = options.get<double>("step");
-    xacc::info("step size set to " + std::to_string(maxeval));
-  }
-
-  int iter = 0;
-  double error = 1.0, oldEnergy = 0.0;
-
-  while (iter < maxeval || std::abs(error) > tol) {
-
-    auto currentEnergy = function(x, dx);
-    std::cout << dx << "  " << iter << "\n";
-    error = currentEnergy - oldEnergy;
-    oldEnergy = currentEnergy;
-
-    std::transform(x.begin(), x.end(), deltaX.begin(), x.begin(),
-                   std::plus<double>());
-
-    std::cout << oldEnergy << "  " << iter << "\n";
-
-    exit(0);
-    iter++;
-  }
-
-  return OptResult{oldEnergy, x};
 }
 
 } // namespace algorithm

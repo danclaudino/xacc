@@ -28,42 +28,26 @@
 namespace xacc {
 namespace algorithm {
 
-// this is from Thien's QNG implementation
-struct ParametrizedCircuitLayer {
-  // Gates that precede the layer
-  std::vector<InstPtr> preOps;
-  // Parametrized operators in the layer
-  std::vector<InstPtr> ops;
-  // Corresponding optimization parameter indices
-  std::vector<size_t> paramInds;
-  // Gates that succeed the layer
-  std::vector<InstPtr> postOps;
-  // Tensor matrix terms:
-  std::vector<xacc::quantum::PauliOperator> kiTerms;
-  std::vector<xacc::quantum::PauliOperator> kikjTerms;
-  // Partition the circuit into layers.
-  static std::vector<ParametrizedCircuitLayer> toParametrizedLayers(
-      const std::shared_ptr<xacc::CompositeInstruction> &in_circuit);
-};
-using ObservedKernels =
-    std::vector<std::shared_ptr<xacc::CompositeInstruction>>;
-
 class PDS_VQS : public Algorithm {
 
 protected:
   std::shared_ptr<Observable> observable;
   Accelerator *accelerator;
-  CompositeInstruction *kernel;
+  CompositeInstruction *initialState;
   Optimizer* optimizer;
+
+  bool adapt = false;
+  std::string poolName = "";
+  int nElectrons;
 
   // CMX order, also K in the paper
   int order, nRoots = 1;
   // threshold below which we ignore measurement
-  double threshold = 0.0, step = 0.05;
+  double printThreshold = 1.0e-5, step = 0.05;
 
   // store the matrices for gradients
   mutable Eigen::MatrixXd M;
-  mutable Eigen::MatrixXd X;
+  mutable Eigen::VectorXd X;
   //mutable Eigen::VectorXd Y;
 
   std::string metric = "GD";
@@ -82,9 +66,12 @@ protected:
                  const std::vector<std::shared_ptr<AcceleratorBuffer>>) const;
 
   // compute matrix M
-  Eigen::MatrixXd computeMatrixM(const std::vector<double> &) const;
+  Eigen::MatrixXd computeMatrixM(const std::vector<double> &, const bool) const;
   // compute vector Y
   Eigen::VectorXd computeVectorY(const std::vector<double> &) const;
+
+  // get derivative of the polynomial
+  Eigen::VectorXd getPolynomialDerivative(const Eigen::VectorXd, const double) const;
 
   //Eigen::MatrixXd
   std::vector<std::vector<double>>
@@ -94,22 +81,6 @@ protected:
 
   Eigen::MatrixXd getMetricMatrix(const std::vector<double> &, const int) const;
 
-  ObservedKernels
-  getMetricCircuits(std::shared_ptr<xacc::CompositeInstruction> in_circuit,
-                    const std::vector<double> &in_x) const;
-
-  ObservedKernels
-  constructMetricTensorSubCircuit(ParametrizedCircuitLayer &io_layer,
-                                  const std::vector<std::string> &in_varNames,
-                                  const std::vector<double> &in_varVals) const;
-
-  Eigen::MatrixXd constructMetricTensorMatrix(
-      const std::vector<std::shared_ptr<xacc::AcceleratorBuffer>> &, const int) const;
-
-  mutable std::vector<ParametrizedCircuitLayer> m_layers;
-  // Keeps track of the term and the index in the kernel sequence.
-  mutable std::unordered_map<std::string, size_t> m_metricTermToIdx;
-
 public:
   bool initialize(const HeterogeneousMap &parameters) override;
   const std::vector<std::string> requiredParameters() const override;
@@ -118,13 +89,6 @@ public:
   const std::string description() const override { return ""; }
 
   DEFINE_ALGORITHM_CLONE(PDS_VQS)
-};
-
-class RiemannianMetricOptimizer : public Optimizer {
-  OptResult optimize(OptFunction &) override;
-  const bool isGradientBased() const override { return true; }
-  const std::string name() const override { return "riemann"; }
-  const std::string description() const override { return ""; }
 };
 
 //
