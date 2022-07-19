@@ -115,6 +115,10 @@ bool ADAPT::initialize(const HeterogeneousMap &parameters) {
     }
   }
 
+  if (parameters.keyExists<bool>("parameter-guess")) {
+    parameterGuess = parameters.get<bool>("parameter-guess");
+  }
+
   if (observable->toString().find("^") != std::string::npos) {
 
     auto jw = xacc::getService<ObservableTransform>("jw");
