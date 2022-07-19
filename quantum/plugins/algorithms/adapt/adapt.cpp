@@ -223,13 +223,39 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
     }
   }
 
+  auto uniqueCommutatorTermsPtr = std::make_shared<PauliOperator>();
+  for (auto &pauliStr : uniqueCommutatorTerms) {
+    uniqueCommutatorTermsPtr->operator+=(PauliOperator(pauliStr));
+  }
+
   xacc::info("Operator pool: " + pool->name());
   xacc::info("Number of operators in the pool: " +
              std::to_string(operators.size()));
   double oldEnergy = 0.0;
   std::vector<double> x; // these are the variational parameters
-
+  // performance metrics
+  int nTotalCircuits = 0, nTotalMeasurements = 0;
+  auto nCircuitsObservable = observable->getNonIdentitySubTerms().size();
+  auto nCircuitsCommutators =
+      uniqueCommutatorTermsPtr->getNonIdentitySubTerms().size();
+  auto nMeasurementsObservable = 0;
+  for (auto &op : observable->getNonIdentitySubTerms()) {
+    nMeasurementsObservable += std::dynamic_pointer_cast<PauliOperator>(op)
+                                   ->getTerms()
+                                   .begin()
+                                   ->second.ops()
+                                   .size();
+  }
+  auto nMeasurementsCommutators = 0;
+  for (auto &op : uniqueCommutatorTermsPtr->getNonIdentitySubTerms()) {
+    nMeasurementsCommutators += std::dynamic_pointer_cast<PauliOperator>(op)
+                                    ->getTerms()
+                                    .begin()
+                                    ->second.ops()
+                                    .size();
+  }
   // start ADAPT loop
+  int nCNOTs = 0;
   for (int iter = 0; iter < _maxIter; iter++) {
 
     xacc::info("Iteration: " + std::to_string(iter + 1));
@@ -255,12 +281,10 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
     }
 
     // observe each term with the current ansatz
-    auto uniqueCommutatorTermsPtr = std::make_shared<PauliOperator>();
-    for (auto &pauliStr : uniqueCommutatorTerms) {
-      uniqueCommutatorTermsPtr->operator+=(PauliOperator(pauliStr));
-    }
     auto evaled = ansatz->operator()(x);
     auto observedKernels = uniqueCommutatorTermsPtr->observe(evaled);
+    nTotalCircuits += nCircuitsCommutators;
+    nTotalMeasurements += nMeasurementsCommutators;
 
     // execute all unique terms
     auto tmpBuffer = xacc::qalloc(buffer->size());
@@ -275,12 +299,12 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
       double commutatorValue = 0.0;
       for (auto &subTerm : commutators[operatorIdx]->getNonIdentitySubTerms()) {
-      auto term =
-          std::dynamic_pointer_cast<PauliOperator>(subTerm)->begin();
+        auto term = std::dynamic_pointer_cast<PauliOperator>(subTerm)->begin();
 
         for (auto &b : buffers) {
           if (b->name() == term->first) {
-            commutatorValue += std::real(subTerm->coefficient() * b->getExpectationValueZ());
+            commutatorValue +=
+                std::real(subTerm->coefficient() * b->getExpectationValueZ());
           }
         }
       }
@@ -326,8 +350,8 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       xacc::info(ss.str());
       ss.str(std::string());
 
-      xacc::info("Final ADAPT-" + subAlgorithm + " circuit\n" +
-                 ansatz->toString());
+      // xacc::info("Final ADAPT-" + subAlgorithm + " circuit\n" +
+      //            ansatz->toString());
 
       // Add the ansatz to the compilation database for later retrieval
       xacc::appendCompiled(ansatz, true);
@@ -350,6 +374,7 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
       // Append new instructions to current circuit
       for (auto &inst : maxCommutatorGate->getInstructions()) {
+        if (inst->name() == "CNOT") nCNOTs++;
         ansatz->addInstruction(inst);
       }
 
@@ -358,9 +383,15 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
         x.insert(x.begin(), xacc::constants::pi / 2.0);
       } else {
         // this should work for QAOA too, but I have not tested it
-        auto normConstant = pool->getNormalizationConstant(maxCommutatorIdx);
-        auto param = newParameter(ansatz, x, oldEnergy, normConstant);
-        x.insert(x.begin(), param);
+        if (parameterGuess) {
+          auto normConstant = pool->getNormalizationConstant(maxCommutatorIdx);
+          auto param = newParameter(ansatz, x, oldEnergy, normConstant);
+          x.push_back(param);
+          nTotalCircuits += 2 * nCircuitsObservable;
+          nTotalMeasurements += 2 * nMeasurementsObservable;
+        } else {
+          x.push_back(0.0);
+        }
       }
       optimizer->appendOption("initial-parameters", x);
 
@@ -381,12 +412,20 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
                          {"ansatz", ansatz}});
 
       double newEnergy;
-      if (subAlgorithm == "vqe" && iter == 0) {
+      if (subAlgorithm == "vqe" && iter == 0 && parameterGuess) {
         newEnergy = sub_opt->execute(buffer, x)[0];
       } else {
         sub_opt->execute(buffer);
         newEnergy = (*buffer)["opt-val"].as<double>();
         x = (*buffer)["opt-params"].as<std::vector<double>>();
+      }
+
+      if (buffer->hasExtraInfoKey("params-energy")) {
+        auto nOptIters = (*buffer)["params-energy"].as<std::vector<double>>().size();
+        if (gradientStrategy) nOptIters *= 3;
+        nTotalCircuits += nOptIters * nCircuitsObservable;
+        nTotalMeasurements += nOptIters * nMeasurementsObservable;
+
       }
 
       oldEnergy = newEnergy;
@@ -405,6 +444,18 @@ void ADAPT::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       for (auto op : ansatzOps) {
         ss << op << " ";
       }
+      xacc::info(ss.str());
+      ss.str(std::string());
+
+      ss << "Number of circuit implementations at ADAPT iteration " << std::to_string(iter + 1) << ": " << nTotalCircuits;
+      xacc::info(ss.str());
+      ss.str(std::string());
+
+      ss << "Number of measurements at ADAPT iteration " << std::to_string(iter + 1) << ": " << nTotalMeasurements;
+      xacc::info(ss.str());
+      ss.str(std::string());
+
+      ss << "Number of CNOTs at ADAPT iteration " << std::to_string(iter + 1) << ": " << nCNOTs;
       xacc::info(ss.str());
       ss.str(std::string());
 

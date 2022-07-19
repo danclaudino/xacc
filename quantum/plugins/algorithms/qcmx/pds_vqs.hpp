@@ -11,8 +11,8 @@
  *   Daniel Claudino - initial API and implementation
  ******************************************************************************/
 //
-// This implements the Quantum Connected Moment Expansion (PDS_VQS) algorithm
-// This implementation follows arXiv:2009.05709v2
+// This implements the PDS_VQS algorithm
+// This implementation follows https://doi.org/10.22331/q-2021-06-10-473
 //
 #ifndef XACC_ALGORITHM_PDS_VQS_HPP_
 #define XACC_ALGORITHM_PDS_VQS_HPP_

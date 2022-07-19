@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2020 UT-Battelle, LLC.
+ * Copyright (c) 2022 UT-Battelle, LLC.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * and Eclipse Distribution License v1.0 which accompanies this
@@ -145,7 +145,6 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   int nTotalCircuits = 0, nTotalMeasurements = 0;
   OptFunction f(
       [&, this](const std::vector<double> &x, std::vector<double> &dx) {
-
         auto evaled = kernel->operator()(x);
         auto kernels = uniqueTerms->observe(evaled);
         auto nEnergyKernels = kernels.size();
@@ -288,6 +287,7 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
     // start adapt
     std::vector<double> x;
     double oldEnergy = 0.0;
+    int nCNOTs = 0;
     for (int iter = 0; iter < maxIterations; iter++) {
 
       // observe unique strings for current ansatz
@@ -342,8 +342,8 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
         gradientNorm += gradient * gradient;
       }
 
-      ss << "Max gradient component: dE/dt " << maxGradientIdx
-         << " = " << maxGradient << " a.u.";
+      ss << "Max gradient component: dE/dt " << maxGradientIdx << " = "
+         << maxGradient << " a.u.";
       xacc::info(ss.str());
       ss.str(std::string());
 
@@ -377,6 +377,8 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
             pool->getOperatorInstructions(maxGradientIdx, kernel->nVariables());
         kernel->addVariable("x" + std::to_string(kernel->nVariables()));
         for (auto &inst : maxGradientGate->getInstructions()) {
+          if (inst->name() == "CNOT")
+            nCNOTs++;
           kernel->addInstruction(inst);
         }
         x.push_back(0.0);
@@ -410,6 +412,11 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
         ss << "Number of measurements at ADAPT iteration " << iter + 1 << ": "
            << nTotalMeasurements;
+        xacc::info(ss.str());
+        ss.str(std::string());
+
+        ss << "Number of CNOTs at ADAPT iteration " << iter + 1 << ": "
+           << nCNOTs;
         xacc::info(ss.str());
         ss.str(std::string());
 
