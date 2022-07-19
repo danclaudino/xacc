@@ -11,15 +11,10 @@
  *   Daniel Claudino - initial API and implementation
  ******************************************************************************/
 #include "pds_vqs.hpp"
-#include "Eigen/src/Core/Matrix.h"
-#include "Eigen/src/Core/util/IndexedViewHelper.h"
-#include "Observable.hpp"
 #include "ObservableTransform.hpp"
 #include "Optimizer.hpp"
-#include "Utils.hpp"
 #include "xacc.hpp"
 #include "xacc_service.hpp"
-#include "PauliOperator.hpp"
 #include "xacc_observable.hpp"
 #include "OperatorPool.hpp"
 
@@ -28,9 +23,6 @@
 #include <iomanip>
 #include <memory>
 #include <sstream>
-#include <string>
-#include <vector>
-#include <optional>
 
 using namespace xacc;
 using namespace xacc::quantum;
@@ -94,11 +86,6 @@ bool PDS_VQS::initialize(const HeterogeneousMap &parameters) {
                std::to_string(printThreshold));
   }
 
-  // this is if we want to optimize excited states
-  if (parameters.keyExists<int>("n-roots")) {
-    nRoots = parameters.get<int>("n-roots");
-  }
-
   if (parameters.stringExists("pool")) {
     poolName = parameters.getString("pool");
   }
@@ -109,6 +96,14 @@ bool PDS_VQS::initialize(const HeterogeneousMap &parameters) {
 
   if (parameters.keyExists<bool>("adapt")) {
     adapt = parameters.get<bool>("adapt");
+  }
+
+  if (parameters.keyExists<int>("maxiter")) {
+    maxIterations = parameters.get<int>("maxiter");
+  }
+
+  if (parameters.keyExists<double>("adapt-threshold")) {
+    _adaptThreshold = parameters.get<double>("adapt-threshold");
   }
 
   return true;
@@ -150,7 +145,7 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   int nTotalCircuits = 0, nTotalMeasurements = 0;
   OptFunction f(
       [&, this](const std::vector<double> &x, std::vector<double> &dx) {
-        
+
         auto evaled = kernel->operator()(x);
         auto kernels = uniqueTerms->observe(evaled);
         auto nEnergyKernels = kernels.size();
@@ -293,7 +288,7 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
     // start adapt
     std::vector<double> x;
     double oldEnergy = 0.0;
-    for (int iter = 0; iter < 50; iter++) {
+    for (int iter = 0; iter < maxIterations; iter++) {
 
       // observe unique strings for current ansatz
       auto evaled = kernel->operator()(x);
@@ -347,8 +342,8 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
         gradientNorm += gradient * gradient;
       }
 
-      ss << "Max gradient component: [H, " << maxGradientIdx
-         << "] = " << maxGradient << " a.u.";
+      ss << "Max gradient component: dE/dt " << maxGradientIdx
+         << " = " << maxGradient << " a.u.";
       xacc::info(ss.str());
       ss.str(std::string());
 
@@ -357,7 +352,7 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
       xacc::info(ss.str());
       ss.str(std::string());
 
-      if (gradientNorm < 0.01) {
+      if (gradientNorm < _adaptThreshold) {
         ss << "Converged!";
         xacc::info(ss.str());
         ss.str(std::string());

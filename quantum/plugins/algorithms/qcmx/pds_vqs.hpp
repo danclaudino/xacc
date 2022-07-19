@@ -18,12 +18,7 @@
 #define XACC_ALGORITHM_PDS_VQS_HPP_
 
 #include "Algorithm.hpp"
-#include "Optimizer.hpp"
-#include "PauliOperator.hpp"
 #include <Eigen/Dense>
-#include <vector>
-#include "Eigen/src/Core/Map.h"
-#include "Observable.hpp"
 
 namespace xacc {
 namespace algorithm {
@@ -38,20 +33,17 @@ protected:
 
   bool adapt = false;
   std::string poolName = "";
-  int nElectrons;
+  int nElectrons, maxIterations = 20;
+  double _adaptThreshold = 1.0e-2;
 
   // CMX order, also K in the paper
-  int order, nRoots = 1;
+  int order;
   // threshold below which we ignore measurement
-  double printThreshold = 1.0e-5, step = 0.05;
+  double printThreshold = 1.0e-5;
 
   // store the matrices for gradients
   mutable Eigen::MatrixXd M;
   mutable Eigen::VectorXd X;
-  //mutable Eigen::VectorXd Y;
-
-  std::string metric = "GD";
-  std::vector<std::string> IMPLD_METRICS{"GD", "NGD", "ITE"};
 
   // Compute energy from PDS CMX
   std::vector<double> PDS(const std::vector<double> &moments) const;
