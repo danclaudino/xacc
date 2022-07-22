@@ -11,6 +11,7 @@
  *   Alexander J. McCaskey - initial API and implementation
  *******************************************************************************/
 #include "xacc.hpp"
+//#include "AlgorithmGradientStrategy.hpp"
 #include "InstructionIterator.hpp"
 #include "IRProvider.hpp"
 #include "CLIParser.hpp"
@@ -52,6 +53,7 @@ std::string rootPathString = "";
 #ifdef MPI_ENABLED
 int isMPIInitialized;
 #endif
+
 
 void set_verbose(bool v) { verbose = v; }
 
@@ -122,9 +124,9 @@ void Initialize(int arc, char **arv) {
     if (provided != MPI_THREAD_MULTIPLE) {
       xacc::warning("MPI_THREAD_MULTIPLE not provided.");
     }
-    isMPIInitialized = 1;
   }
 #endif
+
 }
 
 void setIsPyApi() { isPyApi = true; }
@@ -852,15 +854,16 @@ void Finalize() {
       }
     }
 
+
     xacc::xaccFrameworkInitialized = false;
     compilation_database.clear();
     allocated_buffers.clear();
     xacc::ServiceAPI_Finalize();
-    // This replaces the HPC virtualization TearDown
+  // This replaces the HPC virtualization TearDown
 #ifdef MPI_ENABLED
-    if (isMPIInitialized) {
-      MPI_Finalize();
-    }
+  if (isMPIInitialized) {
+    MPI_Finalize();
+  }
 #endif
   }
 }
@@ -885,16 +888,16 @@ std::shared_ptr<AlgorithmGradientStrategy> getGradient(const std::string name) {
   return g;
 }
 
-std::shared_ptr<AlgorithmGradientStrategy>
-getGradient(const std::string name, const xacc::HeterogeneousMap &params) {
+std::shared_ptr<AlgorithmGradientStrategy> getGradient(const std::string name,
+                                        const xacc::HeterogeneousMap &params) {
   auto g = xacc::getGradient(name);
   if (!g->initialize(params)) {
     error("Error initializing " + name + " gradient strategy.");
   }
   return g;
 }
-std::shared_ptr<AlgorithmGradientStrategy>
-getGradient(const std::string name, const xacc::HeterogeneousMap &&params) {
+std::shared_ptr<AlgorithmGradientStrategy> getGradient(const std::string name,
+                                        const xacc::HeterogeneousMap &&params) {
   return getGradient(name, params);
 }
 

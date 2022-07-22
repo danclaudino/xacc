@@ -34,6 +34,9 @@ void HPCVirtDecorator::initialize(const HeterogeneousMap &params) {
     }
     n_virtual_qpus = params.get<int>("n-virtual-qpus");
   }
+  if (params.keyExists<int>("shots")) {
+    shots = params.get<int>("shots");
+  }
 }
 
 void HPCVirtDecorator::updateConfiguration(const HeterogeneousMap &config) {
@@ -109,8 +112,20 @@ void HPCVirtDecorator::execute(
   // Give that sub communicator to the accelerator
   void *qpu_comm_ptr =
       reinterpret_cast<void *>(qpuComm->getMPICommProxy().getRef<MPI_Comm>());
-  decoratedAccelerator->updateConfiguration(
-      {{"mpi-communicator", qpu_comm_ptr}});
+
+  // this enables shot-based simulation
+  HeterogeneousMap properties;
+  properties.insert("mpi-communicator", qpu_comm_ptr);
+  auto isShotBased = (shots > 1) ? true : false;
+  if (isShotBased) {
+    properties.insert("shots", shots);
+    if (decoratedAccelerator->getBitOrder() == Accelerator::BitOrder::LSB) {
+      isLSB = true;
+    } else {
+      isLSB = false;
+    }
+  }
+  decoratedAccelerator->updateConfiguration(properties);
 
   // get the number of sub-communicators
   // Everybody split the CompositeInstructions vector into n_virtual_qpu
@@ -153,9 +168,13 @@ void HPCVirtDecorator::execute(
   MPI_Bcast(nLocalChildren.data(), nLocalChildren.size(), MPI_INT, 0,
             qpuComm->getMPICommProxy().getRef<MPI_Comm>());
 
-  // get expectation values and the size of the key of each child buffer
+  // get expectation values
+  // size of the key of each child buffer
+  // and number of measured bitstrings
   std::vector<double> globalExpVals(nGlobalChildren);
   std::vector<int> globalKeySizes(nGlobalChildren);
+  std::vector<int> globalNumberBitStrings;
+  if (isShotBased) globalNumberBitStrings.resize(nGlobalChildren);
   if (world_rank == qpuComm->getProcessRanks()[0]) {
 
     // get displacements for the keys in each comm
@@ -167,10 +186,13 @@ void HPCVirtDecorator::execute(
 
     // get size of each key in the communicator
     std::vector<double> localExpVals;
-    std::vector<int> localKeySizes;
+    std::vector<int> localKeySizes, localNumberBitStrings;
     for (auto child : my_buffer->getChildren()) {
       localKeySizes.push_back(child->name().size());
       localExpVals.push_back(child->getExpectationValueZ());
+      if (isShotBased) {
+        localNumberBitStrings.push_back(child->getMeasurementCounts().size());
+      }
     }
 
     // gather all expectation values
@@ -184,6 +206,16 @@ void HPCVirtDecorator::execute(
                    globalKeySizes.data(), nLocalChildren.data(),
                    nKeyShift.data(), MPI_INT,
                    zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+
+    if (isShotBased) {
+
+      MPI_Allgatherv(localNumberBitStrings.data(), localNumberBitStrings.size(), MPI_INT,
+                     globalNumberBitStrings.data(), nLocalChildren.data(),
+                     nKeyShift.data(), MPI_INT,
+                     zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+
+    }
+
   }
 
   // broadcast expectation values
@@ -194,19 +226,48 @@ void HPCVirtDecorator::execute(
   MPI_Bcast(globalKeySizes.data(), globalKeySizes.size(), MPI_INT, 0,
             qpuComm->getMPICommProxy().getRef<MPI_Comm>());
 
+  // broadcast number of bit strings
+  if (isShotBased) {
+    MPI_Bcast(globalNumberBitStrings.data(), globalNumberBitStrings.size(), MPI_INT, 0,
+              qpuComm->getMPICommProxy().getRef<MPI_Comm>());
+  }
+
   // get the size of all keys
   auto nGlobalKeyChars =
       std::accumulate(globalKeySizes.begin(), globalKeySizes.end(), 0);
 
+  // get total number of measured bitstrings
+  auto nGlobalBitStrings =
+      std::accumulate(globalNumberBitStrings.begin(), globalNumberBitStrings.end(), 0);
+
   // gather all keys chars
   std::vector<char> globalKeyChars(nGlobalKeyChars);
+  std::vector<int> globalBitStrings, globalCounts;
+  if (isShotBased) {
+    globalBitStrings.resize(nGlobalBitStrings);
+    globalCounts.resize(nGlobalBitStrings);
+  }
   if (world_rank == qpuComm->getProcessRanks()[0]) {
 
     // get local key char arrays
+    // and local bitstrings and counts
     std::vector<char> localKeys;
+    std::vector<int> localBitStringIndices, localCounts;
     for (auto child : my_buffer->getChildren()) {
       for (auto c : child->name()) {
         localKeys.push_back(c);
+      }
+
+      // get bitstring decimals and counts
+      if (isShotBased) {
+        for (auto & count : child->getMeasurementCounts()) {
+          auto bitString = count.first;
+          // stoi is MSB
+          if(isLSB) std::reverse(bitString.begin(), bitString.end());
+          auto index = std::stoi(count.first, nullptr, 2);
+          localBitStringIndices.push_back(index);
+          localCounts.push_back(count.second);
+        }
       }
     }
 
@@ -231,14 +292,68 @@ void HPCVirtDecorator::execute(
                    globalKeyChars.data(), commKeySize.data(),
                    keySizeShift.data(), MPI_CHAR,
                    zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+
+    if (isShotBased) {
+
+      // get number of bit strings in the communicator
+      std::vector<int> commNumberBitStrings(n_virtual_qpus);
+      shift = 0;
+      for (int i = 0; i < n_virtual_qpus; i++) {
+        auto it = globalNumberBitStrings.begin() + shift;
+        commNumberBitStrings[i] = std::accumulate(it, it + nLocalChildren[i], 0);
+        shift += nLocalChildren[i];
+      }
+
+      // shifts for bit strings 
+      std::vector<int> bitStringShift(n_virtual_qpus);
+      for (int i = 1; i < n_virtual_qpus; i++) {
+        bitStringShift[i] =
+            std::accumulate(commNumberBitStrings.begin(), commNumberBitStrings.begin() + i, 0);
+      }
+
+      // gather all key chars
+      MPI_Allgatherv(localBitStringIndices.data(), localBitStringIndices.size(), MPI_INT,
+                     globalBitStrings.data(), commNumberBitStrings.data(),
+                     bitStringShift.data(), MPI_INT,
+                     zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+
+      // gather all key chars
+      MPI_Allgatherv(localCounts.data(), localCounts.size(), MPI_INT,
+                     globalCounts.data(), commNumberBitStrings.data(),
+                     bitStringShift.data(), MPI_INT,
+                     zeroRanksComm->getMPICommProxy().getRef<MPI_Comm>());
+
+    }
   }
 
   // broadcast all keys
   MPI_Bcast(globalKeyChars.data(), globalKeyChars.size(), MPI_CHAR, 0,
             qpuComm->getMPICommProxy().getRef<MPI_Comm>());
 
+  if (isShotBased) {
+
+  // broadcast indices
+  MPI_Bcast(globalBitStrings.data(), globalBitStrings.size(), MPI_INT, 0,
+            qpuComm->getMPICommProxy().getRef<MPI_Comm>());
+
+  MPI_Bcast(globalCounts.data(), globalCounts.size(), MPI_INT, 0,
+            qpuComm->getMPICommProxy().getRef<MPI_Comm>());
+  }
+
+  // get binary from decimal
+  const auto getBinary = [=](int n, int b){
+    std::string s;
+    while (n != 0) {
+      s += (n % 2 == 0 ? "0" : "1" );
+      n /= 2;
+    }
+    s += std::string(buffer->size() - s.size() - b, '0');
+    std::reverse(s.begin(), s.end());
+    return s;
+  };      
+
   // now every process has everything to rebuild the buffer
-  int shift = 0;
+  int shift = 0, countShift = 0;;
   for (int i = 0; i < nGlobalChildren; i++) {
 
     // get child name
@@ -249,6 +364,22 @@ void HPCVirtDecorator::execute(
     auto child = xacc::qalloc(buffer->size());
     child->setName(name);
     child->addExtraInfo("exp-val-z", globalExpVals[i]);
+
+    if (isShotBased) {
+
+      auto nChildBitStrings = globalNumberBitStrings[i];
+      for (int b = 0; b < nChildBitStrings; b++) {
+
+        auto counts = globalCounts[b + countShift];
+        auto bitStringDecimal = globalBitStrings[b + countShift];
+        auto nBits = name.length() /2;
+        auto bitString = getBinary(bitStringDecimal, nBits);
+        child->appendMeasurement(bitString, counts);      
+
+      }
+      countShift += nChildBitStrings;
+    }
+
     buffer->appendChild(name, child);
     shift += globalKeySizes[i];
   }

@@ -26,9 +26,10 @@ namespace quantum {
 class HPCVirtDecorator : public AcceleratorDecorator {
 protected:
 
-  int n_virtual_qpus = 1;
+  int n_virtual_qpus = 1, shots = -1;
   // The MPI communicator for each QPU
   std::shared_ptr<ProcessGroup> qpuComm;
+  bool isLSB;
 
 public:
   void initialize(const HeterogeneousMap &params = {}) override;
