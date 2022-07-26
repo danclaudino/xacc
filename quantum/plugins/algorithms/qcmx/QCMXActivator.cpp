@@ -12,6 +12,7 @@
  *******************************************************************************/
 #include "qcmx.hpp"
 #include "pds_vqs.hpp"
+#include "adapt_pds_vqs.hpp"
 
 #include "cppmicroservices/BundleActivator.h"
 #include "cppmicroservices/BundleContext.h"
@@ -39,6 +40,9 @@ public:
 
     auto p = std::make_shared<xacc::algorithm::PDS_VQS>();
     context.RegisterService<xacc::Algorithm>(p);
+
+    auto a = std::make_shared<xacc::algorithm::ADAPT_PDS_VQS>();
+    context.RegisterService<xacc::Algorithm>(a);
 
   }
 

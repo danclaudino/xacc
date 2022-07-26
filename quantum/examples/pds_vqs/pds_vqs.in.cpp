@@ -22,14 +22,21 @@ int main(int argc, char **argv) {
 
   // Process the input arguments
   std::vector<std::string> arguments(argv + 1, argv + argc);
-  std::string geometry;
+  std::string geometry, opt = "cobyla";
   int order = 2;
+  double tol = 1.0e-6;
   for (int i = 0; i < arguments.size(); i++) {
     if (arguments[i] == "--pool") {
       order = std::stoi(arguments[i + 1]);
     }
     if (arguments[i] == "--geometry") {
       geometry = arguments[i + 1];
+    }
+    if (arguments[i] == "--tol") {
+      tol = std::stod(arguments[i + 1]);
+    }
+    if (arguments[i] == "--optimizer") {
+      opt = arguments[i + 1];
     }
   }
 
@@ -43,11 +50,18 @@ int main(int argc, char **argv) {
 
   auto q = xacc::qalloc(H->nBits());
 
-  auto optimizer = xacc::getOptimizer("nlopt", {{"algorithm", "l-bfgs"}});
+  auto optimizer = xacc::getOptimizer("nlopt", {{"algorithm", opt}, {"ftol", tol}});
 
   auto tmp = xacc::getService<xacc::Instruction>("uccsd");
   auto uccsd = std::dynamic_pointer_cast<xacc::CompositeInstruction>(tmp);
 	uccsd->expand({std::make_pair("ne", 4), std::make_pair("nq", 8)});
+  auto provider = xacc::getService<xacc::IRProvider>("quantum");
+  auto ansatz = provider->createComposite("initial-state");
+  for (std::size_t i : {0, 1, 4, 5}) {
+    ansatz->addInstruction(provider->createInstruction("X", {i}));
+  }
+  ansatz->addVariables(uccsd->getVariables());
+  for (auto & inst : uccsd->getInstructions()) ansatz->addInstruction(inst);
 
   auto pds_vqs = xacc::getAlgorithm("pds-vqs", {{"observable", H},
                                                 {"accelerator", accelerator},

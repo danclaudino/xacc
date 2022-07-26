@@ -22,13 +22,24 @@ int main(int argc, char **argv) {
 
   // Process the input arguments
   std::vector<std::string> arguments(argv + 1, argv + argc);
-  std::string pool = "singles-doubles-pool", geometry;
+  std::string pool = "singles-doubles-pool", geometry, opt = "cobyla";
+  double tol = 1.0e-3;
+  bool guess = false;
   for (int i = 0; i < arguments.size(); i++) {
     if (arguments[i] == "--pool") {
       pool = arguments[i + 1];
     }
+    if (arguments[i] == "--optimizer") {
+      opt = arguments[i + 1];
+    }
     if (arguments[i] == "--geometry") {
       geometry = arguments[i + 1];
+    }
+    if (arguments[i] == "--tol") {
+      tol = std::stod(arguments[i + 1]);
+    }
+    if (arguments[i] == "--guess") {
+      guess = std::stoi(arguments[i + 1]);
     }
   }
 
@@ -42,13 +53,13 @@ int main(int argc, char **argv) {
 
   auto q = xacc::qalloc(H->nBits());
 
-  auto optimizer = xacc::getOptimizer("nlopt", {{"algorithm", "l-bfgs"}});
+  auto optimizer = xacc::getOptimizer("nlopt", {{"algorithm", opt}, {"ftol", tol}});
 
   auto adapt_vqe = xacc::getAlgorithm("adapt", {{"observable", H},
                                                 {"accelerator", accelerator},
                                                 {"n-electrons", 4},
                                                 {"pool", pool},
-                                                {"parameter-guess", false},
+                                                {"parameter-guess", guess},
                                                 {"sub-algorithm", "vqe"},
                                                 {"gradient_strategy", "parameter-shift"},
                                                 {"optimizer", optimizer}});

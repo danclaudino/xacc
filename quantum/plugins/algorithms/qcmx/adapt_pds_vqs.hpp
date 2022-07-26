@@ -14,8 +14,8 @@
 // This implements the PDS_VQS algorithm
 // This implementation follows https://doi.org/10.22331/q-2021-06-10-473
 //
-#ifndef XACC_ALGORITHM_PDS_VQS_HPP_
-#define XACC_ALGORITHM_PDS_VQS_HPP_
+#ifndef XACC_ALGORITHM_ADAPT_PDS_VQS_HPP_
+#define XACC_ALGORITHM_ADAPT_PDS_VQS_HPP_
 
 #include "Algorithm.hpp"
 #include <Eigen/Dense>
@@ -24,7 +24,7 @@
 namespace xacc {
 namespace algorithm {
 
-class PDS_VQS : public Algorithm {
+class ADAPT_PDS_VQS : public Algorithm {
 
 protected:
   std::shared_ptr<Observable> observable;
@@ -74,14 +74,16 @@ protected:
 
   Eigen::MatrixXd getMetricMatrix(const std::vector<double> &, const int) const;
 
+  //double optFunctionWrapper(const std::shared_ptr<CompositeInstruction>)
+
 public:
   bool initialize(const HeterogeneousMap &parameters) override;
   const std::vector<std::string> requiredParameters() const override;
   void execute(const std::shared_ptr<AcceleratorBuffer> buffer) const override;
-  const std::string name() const override { return "pds-vqs"; }
+  const std::string name() const override { return "adapt-pds-vqs"; }
   const std::string description() const override { return ""; }
 
-  DEFINE_ALGORITHM_CLONE(PDS_VQS)
+  DEFINE_ALGORITHM_CLONE(ADAPT_PDS_VQS)
 };
 
 //

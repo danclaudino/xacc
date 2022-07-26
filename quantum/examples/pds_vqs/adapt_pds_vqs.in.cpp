@@ -23,14 +23,27 @@ int main(int argc, char **argv) {
 
   // Process the input arguments
   std::vector<std::string> arguments(argv + 1, argv + argc);
-  std::string geometry;
-  int order = 2;
+  std::string geometry, pool = "singles-doubles-pool", opt = "cobyla";
+  int order = 2, nElectrons = 4;
+  double tol = 1.0e-3;
   for (int i = 0; i < arguments.size(); i++) {
-    if (arguments[i] == "--pool") {
+    if (arguments[i] == "--order") {
       order = std::stoi(arguments[i + 1]);
+    }
+    if (arguments[i] == "--n-electrons") {
+      nElectrons = std::stoi(arguments[i + 1]);
+    }
+    if (arguments[i] == "--optimizer") {
+      opt = arguments[i + 1];
     }
     if (arguments[i] == "--geometry") {
       geometry = arguments[i + 1];
+    }
+    if (arguments[i] == "--pool") {
+      pool = arguments[i + 1];
+    }
+    if (arguments[i] == "--tol") {
+      tol = std::stod(arguments[i + 1]);
     }
   }
 
@@ -50,11 +63,13 @@ int main(int argc, char **argv) {
     ansatz->addInstruction(provider->createInstruction("X", {i}));
   }
 
-  auto optimizer = xacc::getOptimizer("nlopt", {{"algorithm", "l-bfgs"}});
+  auto optimizer = xacc::getOptimizer("nlopt", {{"algorithm", opt}, {"ftol", tol}});
 
-  auto pds_vqs = xacc::getAlgorithm("pds-vqs", {{"observable", H},
+  auto pds_vqs = xacc::getAlgorithm("adapt-pds-vqs", {{"observable", H},
                                                 {"accelerator", accelerator},
                                                 {"ansatz", ansatz},
+                                                {"pool", pool},
+                                                {"n-electrons", nElectrons},
                                                 {"adapt", true},
                                                 {"cmx-order", order},
                                                 {"optimizer", optimizer}});

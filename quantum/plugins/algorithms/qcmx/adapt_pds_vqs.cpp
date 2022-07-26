@@ -10,7 +10,7 @@
  * Contributors:
  *   Daniel Claudino - initial API and implementation
  ******************************************************************************/
-#include "pds_vqs.hpp"
+#include "adapt_pds_vqs.hpp"
 #include "ObservableTransform.hpp"
 #include "Optimizer.hpp"
 #include "Utils.hpp"
@@ -38,7 +38,7 @@ double beta(double x, double y) { return boost::math::beta(x, y); }
 namespace xacc {
 namespace algorithm {
 
-bool PDS_VQS::initialize(const HeterogeneousMap &parameters) {
+bool ADAPT_PDS_VQS::initialize(const HeterogeneousMap &parameters) {
 
   if (!parameters.pointerLikeExists<Observable>("observable")) {
     xacc::error("Obs was false.");
@@ -110,11 +110,11 @@ bool PDS_VQS::initialize(const HeterogeneousMap &parameters) {
   return true;
 }
 
-const std::vector<std::string> PDS_VQS::requiredParameters() const {
+const std::vector<std::string> ADAPT_PDS_VQS::requiredParameters() const {
   return {"observable", "accelerator", "cmx-order", "ansatz", "optimizer"};
 }
 
-void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
+void ADAPT_PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
   std::stringstream ss;
   ss << std::setprecision(12);
@@ -130,131 +130,10 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
   // now get the unique terms in all moments operators
   auto uniqueTerms = getUniqueTerms(momentOperators);
 
-  std::vector<double> optSpectrum(order), energies;
-  double optEnergy = 10000; // just some ridiculous number
+  std::vector<double> optSpectrum(order);
 
   // performance metrics
   int nTotalCircuits = 0, nTotalMeasurements = 0;
-  OptFunction f(
-      [&, this](const std::vector<double> &x, std::vector<double> &dx) {
-        auto evaled = kernel->operator()(x);
-        auto kernels = uniqueTerms->observe(evaled);
-        auto nEnergyKernels = kernels.size();
-
-        // now get circuits for gradients of unique terms
-        int nGradKernels = 0;
-        if (optimizer->isGradientBased()) {
-          auto parameterShift = xacc::getGradient("parameter-shift");
-          parameterShift->initialize(
-              {{"observable", uniqueTerms}, {"shift-scalar", 0.5}});
-          auto gradKernels = parameterShift->getGradientExecutions(xacc::as_shared_ptr(kernel), x);
-
-          nGradKernels = gradKernels.size();
-          kernels.insert(kernels.end(), gradKernels.begin(), gradKernels.end());
-        }
-
-        // excecute all circuits
-        auto tmpBuffer = qalloc(buffer->size());
-        accelerator->execute(tmpBuffer, kernels);
-
-        nTotalCircuits += kernels.size();
-        for (auto &op : uniqueTerms->getNonIdentitySubTerms()) {
-          nTotalMeasurements += std::dynamic_pointer_cast<PauliOperator>(op)
-                                    ->getTerms()
-                                    .begin()
-                                    ->second.ops()
-                                    .size();
-        }
-
-        // keep track of buffers
-        auto buffers = tmpBuffer->getChildren();
-        auto energyBuffers = std::vector<std::shared_ptr<AcceleratorBuffer>>(
-            buffers.begin(), buffers.begin() + nEnergyKernels);
-        auto gradBuffers = std::vector<std::shared_ptr<AcceleratorBuffer>>(
-            buffers.begin() + nEnergyKernels,
-            buffers.begin() + nEnergyKernels + nGradKernels);
-
-        // compute moments and spectrum
-        auto moments = computeMoments(momentOperators, energyBuffers);
-        auto spectrum = PDS(moments);
-
-        // get ground state energy
-        auto energy = *std::min_element(spectrum.begin(), spectrum.end());
-        energies.push_back(energy);
-        if (energy < optEnergy) {
-          optEnergy = energy;
-          optSpectrum = spectrum;
-        }
-
-        if (!optimizer->isGradientBased()) {
-          ss << "PDS-VQS(" << order << "): " << energy << "\t x: " << x << "\n";
-          xacc::info(ss.str());
-          ss.str(std::string());
-
-        return energy;
-        }
-
-        // get denominator and derivative of the polynomial in eq. 17
-        Eigen::VectorXd polynomialDerivative =
-            getPolynomialDerivative(X, energy);
-
-        // get moments gradients
-        auto nParams = x.size();
-        auto nTerms = uniqueTerms->getNonIdentitySubTerms().size();
-        auto momentsGradients = computeMomentsGradients(
-            momentOperators, gradBuffers, nTerms, nParams);
-
-        // get the ground state energy gradient
-        Eigen::VectorXd dE = Eigen::VectorXd::Zero(nParams);
-        for (int i = 0; i < nParams; i++) {
-
-          // get gradient wrt parameter
-          auto gradMomentsParam = momentsGradients[i];
-
-          // get dM
-          Eigen::MatrixXd dM(order, order);
-          dM = computeMatrixM(gradMomentsParam, true);
-          // M(order, order) = <trial|trial> = 1
-          // so it has no angle dependence, thus its derivative is 0
-
-          // get dY
-          Eigen::VectorXd dY(order);
-          dY = computeVectorY(gradMomentsParam);
-
-          // get dX
-          Eigen::VectorXd dX(order);
-          dX = M.colPivHouseholderQr().solve(-dY - dM * X).transpose();
-
-          // get dE
-          dE(i) = polynomialDerivative.dot(dX);
-        }
-
-        dx = std::vector<double>(dE.data(), dE.data() + dE.size());
-        ss << "PDS-VQS(" << order << "): " << energy << "\t dx: " << dx << "\n";
-        xacc::info(ss.str());
-        ss.str(std::string());
-
-        return energy;
-      },
-      kernel->nVariables());
-
-  if (!adapt) {
-
-    auto result = optimizer->optimize(f);
-    buffer->addExtraInfo("spectrum", optSpectrum);
-    buffer->addExtraInfo("opt-val", ExtraInfo(result.first));
-    buffer->addExtraInfo("opt-params", ExtraInfo(result.second));
-    buffer->addExtraInfo("energies", energies);
-
-    ss << "Total number of circuit implementations: " << nTotalCircuits;
-    xacc::info(ss.str());
-    ss.str(std::string());
-
-    ss << "Total number of measurements: " << nTotalMeasurements;
-    xacc::info(ss.str());
-    ss.str(std::string());
-
-  } else {
 
     // get operator pool
     auto pool = xacc::getService<OperatorPool>(poolName);
@@ -371,6 +250,10 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
         xacc::info(ss.str());
         ss.str(std::string());
 
+        buffer->addExtraInfo("spectrum", optSpectrum);
+        buffer->addExtraInfo("opt-val", ExtraInfo(oldEnergy));
+        buffer->addExtraInfo("opt-params", ExtraInfo(x));
+
         return;
 
       } else {
@@ -387,15 +270,27 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 
         optimizer->appendOption("initial-parameters", x);
 
-        auto result = optimizer->optimize(f);
+        auto pds_vqs = xacc::getAlgorithm("pds-vqs", {{"observable", observable},
+                                                {"accelerator", accelerator},
+                                                {"ansatz", kernel},
+                                                {"cmx-order", order},
+                                                {"optimizer", optimizer}});
 
-        auto newEnergy = result.first;
+        pds_vqs->execute(buffer);
+
+        auto newEnergy = (*buffer)["opt-val"].as<double>();
+        x = (*buffer)["opt-params"].as<std::vector<double>>();
+        optSpectrum = (*buffer)["spectrum"].as<std::vector<double>>();
+        auto nIters = (*buffer)["energies"].as<std::vector<double>>().size();
+
+        nTotalCircuits += nIters * observedKernels.size();
+        nTotalMeasurements += nIters * nMeasurements;
+
         oldEnergy = newEnergy;
         ss << "Energy at ADAPT iteration " << iter + 1 << ": " << newEnergy;
         xacc::info(ss.str());
         ss.str(std::string());
 
-        x = result.second;
         ss << "Parameters at ADAPT iteration " << iter + 1 << ": ";
         for (auto param : x) {
           ss << param << " ";
@@ -423,12 +318,9 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
         xacc::info(ss.str());
         ss.str(std::string());
 
-        buffer->addExtraInfo("spectrum", optSpectrum);
-        buffer->addExtraInfo("opt-val", ExtraInfo(result.first));
-        buffer->addExtraInfo("opt-params", ExtraInfo(result.second));
       }
     }
-  }
+  
 
   return;
 }
@@ -436,7 +328,7 @@ void PDS_VQS::execute(const std::shared_ptr<AcceleratorBuffer> buffer) const {
 // Compute energy from CMX
 // J. Phys. A: Math. Gen. 17, 625 (1984)
 // and Int. J. Mod. Phys. B 9, 2899 (1995)
-std::vector<double> PDS_VQS::PDS(const std::vector<double> &moments) const {
+std::vector<double> ADAPT_PDS_VQS::PDS(const std::vector<double> &moments) const {
 
   M = computeMatrixM(moments, false);
   Eigen::VectorXd Y(order);
@@ -471,7 +363,7 @@ std::vector<double> PDS_VQS::PDS(const std::vector<double> &moments) const {
   return spectrum;
 }
 
-std::shared_ptr<Observable> PDS_VQS::getUniqueTerms(
+std::shared_ptr<Observable> ADAPT_PDS_VQS::getUniqueTerms(
     const std::vector<std::shared_ptr<Observable>> momentOps) const {
 
   std::vector<std::string> uniqueTermsStrings;
@@ -492,7 +384,7 @@ std::shared_ptr<Observable> PDS_VQS::getUniqueTerms(
   return uniqueTermsPtr;
 }
 
-std::vector<double> PDS_VQS::computeMoments(
+std::vector<double> ADAPT_PDS_VQS::computeMoments(
     const std::vector<std::shared_ptr<Observable>> momentOperators,
     const std::vector<std::shared_ptr<AcceleratorBuffer>> buffers) const {
 
@@ -521,7 +413,7 @@ std::vector<double> PDS_VQS::computeMoments(
   return moments;
 }
 
-Eigen::MatrixXd PDS_VQS::computeMatrixM(const std::vector<double> &moments,
+Eigen::MatrixXd ADAPT_PDS_VQS::computeMatrixM(const std::vector<double> &moments,
                                         const bool gradient) const {
 
   Eigen::MatrixXd ret = Eigen::MatrixXd::Zero(order, order);
@@ -540,7 +432,7 @@ Eigen::MatrixXd PDS_VQS::computeMatrixM(const std::vector<double> &moments,
 }
 
 Eigen::VectorXd
-PDS_VQS::computeVectorY(const std::vector<double> &moments) const {
+ADAPT_PDS_VQS::computeVectorY(const std::vector<double> &moments) const {
 
   Eigen::VectorXd ret = Eigen::VectorXd::Zero(order);
   for (int i = 0; i < order; i++) {
@@ -550,7 +442,7 @@ PDS_VQS::computeVectorY(const std::vector<double> &moments) const {
   return ret;
 }
 
-Eigen::VectorXd PDS_VQS::getPolynomialDerivative(const Eigen::VectorXd X,
+Eigen::VectorXd ADAPT_PDS_VQS::getPolynomialDerivative(const Eigen::VectorXd X,
                                                  const double energy) const {
 
   // get denominator and derivative of the polynomial in eq. 17
@@ -566,7 +458,7 @@ Eigen::VectorXd PDS_VQS::getPolynomialDerivative(const Eigen::VectorXd X,
   return polynomialDerivative;
 }
 
-std::vector<std::vector<double>> PDS_VQS::computeMomentsGradients(
+std::vector<std::vector<double>> ADAPT_PDS_VQS::computeMomentsGradients(
     const std::vector<std::shared_ptr<Observable>> momentOperators,
     const std::vector<std::shared_ptr<AcceleratorBuffer>> buffers,
     const int nTerms, const int nParams) const {
