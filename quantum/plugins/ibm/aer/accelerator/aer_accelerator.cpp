@@ -28,6 +28,7 @@
 #include "simulators/density_matrix/densitymatrix.hpp"
 #include "xacc.hpp"
 #include "xacc_service.hpp"
+#include "aer_custatevec.hpp"
 
 #include <bitset>
 #include <optional>
@@ -110,6 +111,8 @@ void AerAccelerator::initialize(const HeterogeneousMap &params) {
   noise_model.clear();
   m_simtype = "qasm";
   connectivity.clear();
+
+  void* state = getState();
 
   xacc_to_qobj = xacc::getCompiler("qobj");
   if (params.keyExists<int>("shots")) {

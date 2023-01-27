@@ -1,6 +1,7 @@
 set(LIBRARY_NAME xacc-aer)
 
 add_subdirectory(py-aer)
+add_subdirectory(cuda)
 
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
   if (NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
@@ -21,12 +22,15 @@ target_include_directories(${LIBRARY_NAME}
                              PUBLIC .
                                     accelerator
                                     src
+                                    cuda
                                     ../common
+                                    ${CMAKE_SOURCE_DIR}/tpls/spd/include
                                     ${CMAKE_SOURCE_DIR}/tpls)
 target_link_libraries(${LIBRARY_NAME}
                         PUBLIC xacc
                                xacc-quantum-gate
                                xacc-py-aer-adapter
+                               aer_custatevec
                         )
 if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "AMD64")
   if(APPLE OR UNIX)
