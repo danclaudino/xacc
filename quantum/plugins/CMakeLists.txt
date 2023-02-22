@@ -28,6 +28,7 @@ add_subdirectory(staq)
 add_subdirectory(honeywell)
 add_subdirectory(observable_transforms)
 #add_subdirectory(jaqal)
+add_subdirectory(azure_quantum)
 
 find_library(QRACK_LIBRARY NAMES qrack)
 if (QRACK_LIBRARY)

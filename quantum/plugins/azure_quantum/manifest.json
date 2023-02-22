@@ -1,0 +1,6 @@
+{
+  "bundle.symbolic_name" : "xacc_azure_quantum",
+  "bundle.activator" : true,
+  "bundle.name" : "Azure Quantum accelerator",
+  "bundle.description" : "Bundle to target Azure Quantum cloud server."
+}
