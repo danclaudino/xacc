@@ -24,7 +24,7 @@ target_include_directories(
   PUBLIC . ../.. ${CMAKE_SOURCE_DIR}/tpls/spdlog 
   PRIVATE ${BOOST_SOURCE})
 
-target_link_libraries(${LIBRARY_NAME} PUBLIC xacc cpr)
+target_link_libraries(${LIBRARY_NAME} PUBLIC xacc cpr PRIVATE Boost::iostreams)
 
 set(_bundle_name xacc_azure_quantum)
 set_target_properties(${LIBRARY_NAME}
@@ -53,7 +53,7 @@ else()
 endif()
 
 if (XACC_BUILD_TESTS) 
-  #add_subdirectory(tests)
+  add_subdirectory(tests)
 endif()
 
 install(TARGETS ${LIBRARY_NAME} DESTINATION ${CMAKE_INSTALL_PREFIX}/plugins)

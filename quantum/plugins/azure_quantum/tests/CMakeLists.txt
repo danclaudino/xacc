@@ -1,0 +1,2 @@
+add_xacc_test(AzureQuantumAccelerator)
+target_link_libraries(AzureQuantumAcceleratorTester xacc)

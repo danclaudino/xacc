@@ -228,26 +228,31 @@ getConfigInfo(const std::string &configFilePath) {
                              std::istreambuf_iterator<char>());
   const auto lines = xacc::split(contents, '\n');
   std::string token, location, subscriptionId, resourceGroup, workspaceName;
+  std::string tmpStr;
 
   for (const auto &line : lines) {
     if (line.find("key") != std::string::npos) {
-      xacc::trim(xacc::split(line, ':')[1]);
-      token = line;
+      tmpStr = xacc::split(line, ':')[1];
+      xacc::trim(tmpStr);
+      token = tmpStr;
     }
-    if (line.find("Location") != std::string::npos) {
-      xacc::trim(xacc::split(line, ':')[1]);
-      location = line;
+    if (line.find("location") != std::string::npos) {
+      tmpStr = xacc::split(line, ':')[1];
+      xacc::trim(tmpStr);
+      location = tmpStr;
     }
     if (line.find("expires") != std::string::npos) {
-      xacc::trim(xacc::split(line, ':')[1]);
-      const auto expiration = std::stoll(line);
+      tmpStr = xacc::split(line, ':')[1];
+      xacc::trim(tmpStr);
+      const auto expiration = std::stoll(tmpStr);
       if (std::time(nullptr) > expiration) {
         throw std::runtime_error("Token expired");
       }
     }
     if (line.find("Resource ID") != std::string::npos) {
-      xacc::trim(xacc::split(line, ':')[1]);
-      const auto resourcePath = line;
+      tmpStr = xacc::split(line, ':')[1];
+      xacc::trim(tmpStr);
+      const auto resourcePath = tmpStr;
       const auto components = xacc::split(resourcePath, '/');
       for (size_t i = 0; i < components.size(); ++i) {
         if (components[i] == "subscriptions") {

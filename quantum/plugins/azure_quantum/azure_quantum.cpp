@@ -13,6 +13,7 @@
 #include "azure_quantum.hpp"
 
 #include <cpr/cpr.h>
+#include <cstdlib>
 #include <spdlog/fmt/fmt.h>
 
 #include <cctype>
@@ -64,10 +65,12 @@ void AzureQuantumAccelerator::initialize(const HeterogeneousMap &params) {
 void AzureQuantumAccelerator::execute(
     std::shared_ptr<AcceleratorBuffer> buffer,
     const std::shared_ptr<CompositeInstruction> circuit) {
+      /*
   if (backend.empty()) {
     xacc::error(
-        "Please specify a honeywell backend in your getAccelerator() call.");
+        "Please specify a backend in your getAccelerator() call.");
   }
+  */
 
     // At a high level we need to:
     // 1. Authenticate using AAD
@@ -76,6 +79,7 @@ void AzureQuantumAccelerator::execute(
         // std::cout << "baseUrl: " << baseUrl << std::endl;
         // std::cout << "token: " << accessToken << std::endl;
         cpr::Header cprHeaders;
+        accessToken = "eyJhbGciOiJSU0EtT0FFUCIsImVuYyI6IkExMjhDQkMtSFMyNTYiLCJ4NXQiOiJZUEVTNE1zc090NjJYLWxnX3dMcHJyc2c4RG8iLCJ6aXAiOiJERUYifQ.MdbuDQM3iDwDvDF61w_jlKm-nk00zlL1l2ap0xUCM_k1Sc9K4eF1rpgQHLRdGpaPvfLq0si97VV2fqDsTtfhvfjVtC-iyL5qYFsSxmffFvLsBy5xHyOrZ39G6d-c4Sa3vMLUGw8oKmCdUWu-7jyHdjUtA6d4nflIHTUB2zR2AzQuRcQe16eQvaLK0S4O7kEdtNrErYQhVM1wA1tfXUwEAaqTGHGZiBn3PSZcJKnrgy9fudUjHqHRKsXoB9LtPHl13elMeem3M-poeSYa1idTK8Indl82FT71yAjMIkEN1N1Rr8C43lu_Z3G57O6KxhLc17ekUXw0ZDshH9VVtDbPaQ.xy4QchCACSPw4tuamP8spQ.UXCgBZP0iWPCZMjUCf1qQx2Q8h7xcIKryEjZNR8aBXQTpl62gUyUQ3n_fnFTylbocUzMxTFVUVYtWyJoZVOuv3P3jGC3NeK4LBARLct_Xpan9CZrT-zD5ElHq5uUqf6PvGqQiaACRRZ1xn4KjnG5E4MfQ9Vd0dvOCerqm6rW_zkYTHZguAhCF-isZSAEec0GXLlsNdgfQ1KOmV5IKt-JyYrX6euNi2_yb2ddDlLBGHlN0KyImPqWyIJ_5IMVNGN2ndK7D9WU0x-06h0YXHsXU5TwtryohC_2ye3W66JfNbXD5XL6IwCG9pKB83-Qq_e_A4V-NqkbheV1mVIQ_wEx44v7kidHXukUUsJEBGWovTqgro6PeR8PIR_RxZ7eVzeoQXZl-dx9kxJ5aang2ExGSJT1cu5xiDEVAEqCq9aVEpCTTNIK7fuYd2du-1HyPOGVjiMTCFr3-YeypsBxqUanKDMMpTeM7Bw2pa1nofNwsNgLN6QCML630sA7eHzBJHMw3X5uqxqHocsY-OXU9cVpTx1Nn_0S1feawHPQoJjy7FPKGyv5aQnOu2uhbKk5HLv95Zj0s5rNXhK_vpHS5veF4S1MxK4FgCOtC-SwwuWrOaCCLKlj-cvGeoVzN4FB6mTAT8Ol2V-8pTdhpjZagB_jJIwVyMEXddIBSj4Tg1KON_GB09cA0P0ZRysbrK3W_WDMr_hKSSpC5E4erOa0oWPykXiIuJFKFbGaUkDFZinZr3I1jr5A0UkR3xndUfX0_Q34jHuDiW2h0UM9QXfm13gk66lLCDFc3Or_TntF5M56PX1-YUWX0EB4WyG-e3ZJFB2nJF_ZDLBVZQ7a653tqMuy1KzyIauF9rUUjC0P7RMGWRiXMly4E0ft8g15ZVTEwP8qQYGQ-ubw1UfG2RTIqQAwvdEMTo2FXcCHqNkoCBAGrxccl2Mm12oJL76RTt39CV8k2hmcl18s2NblqxI1yEtwMdQT_yPLjEqHGCAKkBWtPOScbHJ1_7ehTAjGN1hxuff1hQGDMseJsqhKAxqDuyC31fng9t2ESJxwN9PFLONinbKnSwtSDXOfo8N5KBxfnuwvviukGqrxUOsGy1VKSxhsIm0lQYw6lhwJxesOHSSGxOc.6yZyobBJ1efBE9W-yXh4bg";
         cprHeaders.insert({"Content-type", "application/json"});
         cprHeaders.insert({"Connection", "keep-alive"});
         cprHeaders.insert({"Accept", "application/json"});
@@ -89,7 +93,8 @@ void AzureQuantumAccelerator::execute(
         auto sasResponse = cpr::Get(cpr::Url{baseUrl + path}, cprHeaders, cprParams,
                                     cpr::VerifySsl(false));
         std::cout << "\nResponse:" << sasResponse.text << "\n";
-
+  //std::cout << accessToken <<  " HERE\n";
+  exit(0);
         // 2. Upload the QIR definition to an Azure Storage
         // see
         // https://docs.microsoft.com/en-us/rest/api/storageservices/put-blob-from-url
