@@ -10,8 +10,8 @@
 [submodule "quantum/plugins/dwave/embedding/minorminer"]
 	path = quantum/plugins/dwave/embedding/minorminer
 	url = https://github.com/dwavesystems/minorminer
-[submodule "xacc/optimizer/nlopt-optimizers/nlopt"]
-	path = xacc/optimizer/nlopt-optimizers/nlopt
+[submodule "tpls/nlopt"]
+	path = tpls/nlopt
 	url = https://github.com/stevengj/nlopt
 [submodule "quantum/plugins/dwave/tpls/legacy-sapi-clients"]
 	path = quantum/plugins/dwave/tpls/legacy-sapi-clients

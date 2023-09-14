@@ -9,7 +9,7 @@ SET(NLOPT_SWIG OFF CACHE BOOL "")
      set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE INTERNAL "No dev warnings")
    endif()
 set(CMAKE_INSTALL_LIBDIR ${CMAKE_INSTALL_PREFIX}/lib)
-add_subdirectory(nlopt)
+add_subdirectory(${CMAKE_SOURCE_DIR}/tpls/nlopt ${CMAKE_BINARY_DIR}/tpls/nlopt)
 
 set(LIBRARY_NAME xacc-optimizer-nlopt)
 
@@ -22,7 +22,7 @@ add_library(${LIBRARY_NAME} SHARED ${SRC})
 
 target_include_directories(
   ${LIBRARY_NAME}
-  PUBLIC . .. ${CMAKE_BUILD_DIR}/xacc/optimizer/nlopt-optimizers/nlopt/src/api)
+  PUBLIC . .. ${CMAKE_BINARY_DIR}/xacc/optimizer/nlopt-optimizers/nlopt/src/api)
 
 target_link_libraries(${LIBRARY_NAME} PUBLIC nlopt xacc CppMicroServices)
 
