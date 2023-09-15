@@ -12,12 +12,13 @@ TEST(AutodiffTester, checkExpValCalc) {
                            "+ .21829 Z0 - 6.125 Z1"));
   // JIT map Quil QASM Ansatz to IR
   xacc::qasm(R"(
-.compiler quil
+.compiler xasm
 .circuit deuteron_ansatz
 .parameters theta
-X 0
-Ry(theta) 1
-CNOT 1 0
+.qbit q
+X(q[0]);
+Ry(q[1],theta);
+CX(q[1],q[0]);
 )");
   auto ansatz = xacc::getCompiled("deuteron_ansatz");
   auto autodiff = std::make_shared<xacc::quantum::Autodiff>();
@@ -49,14 +50,15 @@ TEST(AutodiffTester, checkGates) {
                            "+ .21829 Z0 - 6.125 Z1"));
   // JIT map Quil QASM Ansatz to IR
   xacc::qasm(R"(
-.compiler quil
+.compiler xasm
 .circuit test1
 .parameters theta0, theta1
-X 0
-H 1
-Rx(theta0) 0
-Ry(theta1) 1
-CNOT 1 0
+.qbit q
+X(q[0]);
+H(q[1]);
+Rx(q[0],theta0);
+Ry(q[1],theta1);
+CX(q[1],q[0]);
 )");
   auto ansatz = xacc::getCompiled("test1");
   auto autodiff = std::make_shared<xacc::quantum::Autodiff>();
@@ -93,12 +95,13 @@ TEST(AutodiffTester, checkGradient) {
                            "+ .21829 Z0 - 6.125 Z1"));
   // JIT map Quil QASM Ansatz to IR
   xacc::qasm(R"(
-.compiler quil
+.compiler xasm
 .circuit ansatz
 .parameters theta
-X 0
-Ry(theta) 1
-CNOT 1 0
+.qbit q
+X(q[0]);
+Ry(q[1],theta);
+CX(q[1],q[0]);
 )");
   auto ansatz = xacc::getCompiled("ansatz");
   auto autodiff = std::make_shared<xacc::quantum::Autodiff>();

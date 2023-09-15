@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include "xacc.hpp"
 #include "xacc_service.hpp"
-#include "nlopt_optimizer.hpp"
+//#include "nlopt_optimizer.hpp"
 
 using namespace xacc;
 

@@ -22,7 +22,7 @@ add_library(${LIBRARY_NAME} SHARED ${SRC})
 
 target_include_directories(
   ${LIBRARY_NAME}
-  PUBLIC . .. ${CMAKE_BINARY_DIR}/xacc/optimizer/nlopt-optimizers/nlopt/src/api)
+  PUBLIC . .. ${CMAKE_SOURCE_DIR}/tpls/nlopt/src/api)
 
 target_link_libraries(${LIBRARY_NAME} PUBLIC nlopt xacc CppMicroServices)
 
