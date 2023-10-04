@@ -13,7 +13,6 @@
 add_subdirectory(ibm)
 add_subdirectory(rigetti)
 #add_subdirectory(cmr)
-add_subdirectory(dwave)
 add_subdirectory(algorithms)
 add_subdirectory(decorators)
 add_subdirectory(circuits)
@@ -42,5 +41,9 @@ add_subdirectory(optimal_control)
 add_subdirectory(qsim)
 add_subdirectory(atos_qlm)
 add_subdirectory(noise_model)
+
+if(XACC_BUILD_ANNEALING)
+    add_subdirectory(dwave)
+endif()
 
 install (FILES utils/OperatorPool.hpp DESTINATION include/quantum/gate)

@@ -18,7 +18,15 @@ message(STATUS "C++ version ${CXX_STANDARD} configured.")
 
 option(XACC_BUILD_TESTS "Build test programs" OFF)
 option(XACC_BUILD_EXAMPLES "Build example programs" OFF)
-option(XACC_BUILD_PLUGINSS "Build plugins" ON)
+option(XACC_BUILD_PLUGINS "Build plugins" ON)
+# only build annealing plugin if asked to
+option(XACC_BUILD_ANNEALING "Build annealing libraries" ON)
+if(XACC_BUILD_ANNEALING)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DANNEALING_ENABLED")
+else()
+  message(STATUS "${BoldYellow}Skipping Annealing libraries.${ColorReset}")
+endif()
+
 option(XACC_ENSMALLEN_INCLUDE_DIR "Path to ensmallen.hpp for mlpack optimizer" "")
 option(XACC_ARMADILLO_INCLUDE_DIR "Path to armadillo header for mlpack optimizer" "")
 

@@ -18,9 +18,11 @@
 
 #include "pyxasm_listener.hpp"
 #include "Circuit.hpp"
-#include "AnnealingProgram.hpp"
 #include <memory>
 #include <regex>
+#ifdef ANNEALING_ENABLED
+ #include "AnnealingProgram.hpp"
+#endif
 
 using namespace pyxasm;
 
@@ -49,13 +51,14 @@ void PyXASMListener::enterInstruction(pyxasmParser::InstructionContext *ctx) {
     instructionName = "CNOT";
   } else if (instructionName == "MEASURE") {
     instructionName = "Measure";
+#ifdef ANNEALING_ENABLED
   } else if (instructionName == "dwqmi") {
       auto isCircuit = std::dynamic_pointer_cast<quantum::Circuit>(function);
       if (isCircuit) {
           function = irProvider->createComposite(function->name(), function->getVariables(), "anneal");
       }
   }
-
+#endif
   auto nRequiredBits = irProvider->getNRequiredBits(instructionName);
   std::vector<std::size_t> bits;
 
@@ -121,10 +124,11 @@ void PyXASMListener::enterInstruction(pyxasmParser::InstructionContext *ctx) {
             std::dynamic_pointer_cast<CompositeInstruction>(tmpInst)->addVariable(params[p].toString());
         }
     }
-
+#ifdef ANNEALING_ENABLED
     if (std::dynamic_pointer_cast<quantum::AnnealingProgram>(tmpInst) && std::dynamic_pointer_cast<quantum::Circuit>(function)) {
         function = irProvider->createComposite(function->name(), function->getVariables(), "anneal");
     }
+#endif
   }
   function->addInstruction(tmpInst);
   function->expand(options);
