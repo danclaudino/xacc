@@ -34,3 +34,6 @@
 [submodule "tpls/eigen"]
 	path = tpls/eigen
 	url = https://gitlab.com/libeigen/eigen.git
+[submodule "tpls/qiskit-aer"]
+	path = tpls/qiskit-aer
+	url = https://github.com/Qiskit/qiskit-aer.git
