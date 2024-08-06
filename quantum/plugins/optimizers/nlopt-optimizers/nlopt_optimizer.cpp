@@ -145,6 +145,12 @@ OptResult NLOptimizer::optimize(OptFunction &function) {
     upperBounds = options.get<std::vector<double>>("nlopt-upper-bounds");
   }
 
+  // if fails to find mininum should not throw error
+  bool throwError = true;
+  if (options.keyExists<bool>("throw-error")) {
+    throwError = options.get<bool>("throw-error");
+  }
+
   _opt.set_lower_bounds(lowerBounds);
   _opt.set_upper_bounds(upperBounds);
   _opt.set_maxeval(maxeval);
@@ -171,10 +177,16 @@ OptResult NLOptimizer::optimize(OptFunction &function) {
   try {
     r = _opt.optimize(x, optF);
   } catch (std::exception &e) {
-    xacc::error("NLOpt failed with error code = " + std::to_string(r) + ", " +
-                std::string(e.what()));
-  }
 
+    if (throwError) {
+      xacc::error("NLOpt failed with error code = " + std::to_string(r) + ", " +
+                std::string(e.what()));
+    } else {
+      xacc::warning("NLOpt failed with error code = " + std::to_string(r) + ", " +
+                std::string(e.what()));
+    }
+
+  }
   return OptResult{optF, x};
 }
 

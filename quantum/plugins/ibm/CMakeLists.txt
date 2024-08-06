@@ -42,15 +42,16 @@ target_include_directories(${LIBRARY_NAME}
                                   accelerator/json
                                   ${CMAKE_SOURCE_DIR}/tpls/antlr/runtime/src
                                   ${CMAKE_SOURCE_DIR}/tpls/rapidjson/include)
-
 target_link_libraries(${LIBRARY_NAME}
-                      PUBLIC xacc
-                              xacc-quantum-gate
-                              ${ANTLR_LIB}
-                              CppMicroServices)
+  PUBLIC
+    xacc
+    xacc-quantum-gate
+    ${ANTLR_LIB}
+    CppMicroServices
+)
 
 if(XACC_REMOTE_ACCELERATORS)
-  target_link_libraries(${LIBRARY_NAME} PRIVATE cpr)
+  target_link_libraries(${LIBRARY_NAME} PRIVATE cpr::cpr)
 endif()
 
 set(_bundle_name xacc_ibm)

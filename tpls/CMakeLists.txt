@@ -24,7 +24,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 # Disable 'deprecated-copy' warnings if the compiler recognizes the flag.
-# especially for different versions of Clang/AppleClang, 
+# especially for different versions of Clang/AppleClang,
 # we don't want to set the flag on compilers that don't support it yet (errors)
 add_compile_flags_if_supported(-Wno-deprecated-copy)
 add_subdirectory(cppmicroservices)
@@ -33,25 +33,16 @@ add_subdirectory(cppmicroservices)
 install(FILES "${CMAKE_BINARY_DIR}/tpls/cppmicroservices/CMakeFiles/Export/share/cppmicroservices4/cmake/CppMicroServicesTargets-release.cmake" DESTINATION share/cppmicroservices4/cmake OPTIONAL)
 
 if(XACC_REMOTE_ACCELERATORS)
-    if (XACC_DEPS_EXTERNAL) 
-        find_package(cpr) 
-        if (cpr_FOUND) 
-            set(XACC_USE_EXTERNAL_CPR TRUE)
-            set (XACC_USE_EXTERNAL_CPR ${XACC_USE_EXTERNAL_CPR} PARENT_SCOPE)
-            message(STATUS "${BoldGreen}cpr: Found system installation config at ${cpr_DIR}${ColorReset}")
-        endif()
-    endif()  
-
-    if (NOT XACC_USE_EXTERNAL_CPR)
-        set(CPR_FORCE_USE_SYSTEM_CURL ON CACHE BOOL "" FORCE)
-        set(CPR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
-        set(BUILD_SHARED_LIBS FALSE)
-        add_subdirectory(cpr)
-    endif()
+  if (NOT cpr_FOUND)
+    set(CPR_FORCE_USE_SYSTEM_CURL ON CACHE BOOL "" FORCE)
+    set(CPR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
+    set(BUILD_SHARED_LIBS FALSE)
+    add_subdirectory(cpr)
+  endif()
 endif()
 
-if(XACC_BUILD_TESTS)
+if(XACC_BUILD_TESTS AND NOT GTest_FOUND)
     # Googletest
     set(BUILD_SHARED_LIBS TRUE)
     include(FetchContent)
@@ -90,10 +81,12 @@ if(XACC_BUILD_TESTS)
 endif()
 
 set(BUILD_SHARED_LIBS FALSE)
-set(BOOST_LIBS_OPTIONAL graph CACHE STRING "" FORCE)
-add_subdirectory(boost-cmake)
+if (NOT Boost_FOUND)
+  set(BOOST_LIBS_OPTIONAL graph CACHE STRING "" FORCE)
+  add_subdirectory(boost-cmake)
+endif()
 
-install(DIRECTORY staq DESTINATION ${CMAKE_INSTALL_PREFIX}/include) 
+install(DIRECTORY staq DESTINATION ${CMAKE_INSTALL_PREFIX}/include)
 
 install (DIRECTORY armadillo DESTINATION ${CMAKE_INSTALL_PREFIX}/include/)
 # Compiler-specific C++11 activation (FROM ANTLR4).
@@ -107,7 +100,6 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU" OR "${CMAKE_CXX_COMPILER_ID}" MATCH
         add_subdirectory(antlr)
     endif()
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang" AND APPLE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
     add_subdirectory(antlr)
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang" AND CMAKE_SYSTEM_NAME MATCHES "Linux")
     execute_process(

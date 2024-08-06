@@ -21,7 +21,7 @@ add_library(${LIBRARY_NAME} SHARED ${SRC})
 
 target_include_directories(${LIBRARY_NAME} PUBLIC .)
 
-target_link_libraries(${LIBRARY_NAME} PUBLIC xacc cpr)
+target_link_libraries(${LIBRARY_NAME} PUBLIC xacc cpr::cpr)
 
 set(_bundle_name xacc_honeywell)
 set_target_properties(${LIBRARY_NAME}
@@ -49,7 +49,7 @@ else()
   set_target_properties(${LIBRARY_NAME} PROPERTIES LINK_FLAGS "-shared")
 endif()
 
-if (XACC_BUILD_TESTS) 
+if (XACC_BUILD_TESTS)
   #add_subdirectory(tests)
 endif()
 

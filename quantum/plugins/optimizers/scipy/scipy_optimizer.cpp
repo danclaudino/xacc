@@ -101,6 +101,12 @@ OptResult ScipyOptimizer::optimize(OptFunction &function) {
     x = std::vector<double>(tmpx.begin(), tmpx.end());
   }
 
+  // if fails to find mininum should not throw error
+  bool throwError = true;
+  if (options.keyExists<bool>("throw-error")) {
+    throwError = options.get<bool>("throw-error");
+  }
+
   // here the python stuff starts
   py::list pyInitialParams;
   for (const auto &param : x) {
@@ -152,11 +158,20 @@ OptResult ScipyOptimizer::optimize(OptFunction &function) {
 
     return {optimalValue, optimizedParams};
   } catch (const py::error_already_set &e) {
-    std::cerr << "Python error: " << e.what() << std::endl;
-    throw;
+
+    if (throwError) {
+      xacc::error("Python error: " + std::string(e.what()));
+      throw;
+    }
+    return {};
+
   } catch (const std::exception &e) {
-    std::cerr << "Error: " << e.what() << std::endl;
-    throw;
+  
+    if (throwError) {
+      xacc::error("Error: " + std::string(e.what()));
+      throw;
+    }
+    return {};
   }
 }
 } // namespace xacc

@@ -187,7 +187,7 @@ bool hasMidCircuitMeasurement(
 }
 
 bool IBMAccelerator::verifyJobsLimit(std::string& curr_backend) {
-  
+
   // Get backend jobs limit
   std::string getJobsLimitPath = "/api/Network/" + hub + "/Groups/" + group +
                         "/Projects/" + project + "/devices/" + curr_backend +
@@ -204,13 +204,13 @@ bool IBMAccelerator::verifyJobsLimit(std::string& curr_backend) {
 }
 
 void IBMAccelerator::processBackendCandidate(nlohmann::json& backend_json) {
-  // First of all filter by count fo qubits  
+  // First of all filter by count fo qubits
   if (requested_n_qubits > 0) {
     if( backend_json.count("n_qubits") ) {
       int nqubits = backend_json["n_qubits"].get<int>();
       if(nqubits < requested_n_qubits) {
         return;
-      } 
+      }
     } else {
       return;
     }
@@ -449,8 +449,7 @@ std::string QasmQObjGenerator::getQObjJsonStr(
   qobj.set_header(qobjHeader);
 
   // Create the JSON String to send
-  nlohmann::json j;
-  nlohmann::to_json(j, qobj);
+  nlohmann::json j = qobj;
 
   return j.dump();
 }
@@ -561,8 +560,7 @@ std::string PulseQObjGenerator::getQObjJsonStr(
   root.set_backend(b);
   root.set_shots(shots);
 
-  nlohmann::json jj;
-  nlohmann::to_json(jj, root.get_q_object());
+  nlohmann::json jj= root.get_q_object();
   return jj.dump();
 }
 
@@ -1020,7 +1018,7 @@ void IBMAccelerator::contributeInstructions(
               pulseParams["duration"].get<int>();
           inst->setDuration(parametricPulseDuration);
         }
-        
+
         // Delay pulse has a duration
         if (inst_name == "delay") {
           inst->setDuration((*seq_iter)["duration"].get<int>());
@@ -1320,7 +1318,7 @@ IBMAccelerator::getNativeCode(std::shared_ptr<CompositeInstruction> program,
             // qc.qasm() breaks when circuit qc contains gates with classical conditioning on a single cbit
             // Please note that this is a limitation of **OpenQASM** only,
             // i.e., qiskit's QuantumCircuit and QObj can both handle classical conditioning on a single cbit.
-            // Our native code gen strategy here is to 
+            // Our native code gen strategy here is to
             // convert multi-qreg indexing into multiple single-cbit registers:
             // i.e., c[3] -> c3 (single-bit register)
             // This only happens when classical conditioning on a single cbit is needed.
