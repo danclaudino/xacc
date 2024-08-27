@@ -10,7 +10,7 @@
 # Contributors:
 #   Alexander J. McCaskey - initial API and implementation
 # *******************************************************************************/
-set(LIBRARY_NAME xacc-honeywell)
+set(LIBRARY_NAME xacc-quantinuum)
 
 file(GLOB SRC *.cpp)
 
@@ -23,7 +23,7 @@ target_include_directories(${LIBRARY_NAME} PUBLIC .)
 
 target_link_libraries(${LIBRARY_NAME} PUBLIC xacc cpr::cpr)
 
-set(_bundle_name xacc_honeywell)
+set(_bundle_name xacc_quantinuum)
 set_target_properties(${LIBRARY_NAME}
                       PROPERTIES COMPILE_DEFINITIONS
                                  US_BUNDLE_NAME=${_bundle_name}

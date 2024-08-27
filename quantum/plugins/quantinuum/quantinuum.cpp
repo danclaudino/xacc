@@ -10,7 +10,7 @@
  * Contributors:
  *   Alexander J. McCaskey - initial API and implementation
  *******************************************************************************/
-#include "honeywell.hpp"
+#include "quantinuum.hpp"
 
 #include <cpr/cpr.h>
 #include <spdlog/fmt/fmt.h>
@@ -78,7 +78,7 @@ std::pair<bool, std::string> need_refresh(std::vector<int> old_key_time) {
                                     now2->tm_hour, now2->tm_min, now2->tm_sec));
 }
 
-void HoneywellAccelerator::refresh_tokens(bool force_refresh) {
+void QuantinuumAccelerator::refresh_tokens(bool force_refresh) {
   if (!time_str.empty()) {
     std::vector<int> old_time_key;
     auto time_split = xacc::split(time_str, '_');
@@ -96,7 +96,7 @@ void HoneywellAccelerator::refresh_tokens(bool force_refresh) {
       api_key = response_json["id-token"].get<std::string>();
       refresh_key = response_json["refresh-token"].get<std::string>();
 
-      std::ofstream out(std::string(getenv("HOME")) + "/.honeywell_config");
+      std::ofstream out(std::string(getenv("HOME")) + "/.quantinuum_config");
       out << "key:" << api_key << "\n";
       out << "refresh:" << refresh_key << "\n";
       out << "time:" << now << "\n";
@@ -106,7 +106,7 @@ void HoneywellAccelerator::refresh_tokens(bool force_refresh) {
   }
 }
 
-void HoneywellAccelerator::initialize(const HeterogeneousMap &params) {
+void QuantinuumAccelerator::initialize(const HeterogeneousMap &params) {
   if (!initialized) {
     searchAPIKey(api_key);
 
@@ -144,7 +144,7 @@ void HoneywellAccelerator::initialize(const HeterogeneousMap &params) {
       if (!xacc::container::contains(available_backends, backend)) {
         std::stringstream ss;
         ss << backend
-           << " is an invalid Honeywell backend or you do not have access to "
+           << " is an invalid Quantinuum backend or you do not have access to "
               "that backend.\nAvailable backends: \n";
         for (const auto &name : available_backends) {
           ss << name << "\n";
@@ -167,19 +167,19 @@ void HoneywellAccelerator::initialize(const HeterogeneousMap &params) {
   }
 }
 
-void HoneywellAccelerator::execute(
+void QuantinuumAccelerator::execute(
     std::shared_ptr<AcceleratorBuffer> buffer,
     const std::shared_ptr<CompositeInstruction> circuit) {
   if (backend.empty()) {
     xacc::error(
-        "Please specify a honeywell backend in your getAccelerator() call.");
+        "Please specify a quantinuum backend in your getAccelerator() call.");
   }
   auto qasm = getNativeCode(circuit);
   while (true) {
     auto backend_status =
         get(url, "machine/" + backend, generateRequestHeader());
     auto status_J = nlohmann::json::parse(backend_status);
-    // xacc::info("\nHoneywell status:\n" + backend_status);
+    // xacc::info("\nQuantinuum status:\n" + backend_status);
     // If offline, terminate
     if (status_J["state"] == "offline") {
       xacc::error("Cannot run on " + backend + ", it is offline.");
@@ -189,11 +189,11 @@ void HoneywellAccelerator::execute(
       break;
     }
     // If status = 'in maintenance', wait for a bit and try again
-    xacc::info("Honeywell is '" + std::string(status_J["state"]) +
+    xacc::info("Quantinuum is '" + std::string(status_J["state"]) +
                "', waiting for a bit...");
     std::this_thread::sleep_for(std::chrono::seconds(60));
   }
-  xacc::info("\nHoneywell sending qasm:\n" + qasm);
+  xacc::info("\nQuantinuum sending qasm:\n" + qasm);
 
   nlohmann::json j;
 
@@ -244,7 +244,7 @@ void HoneywellAccelerator::execute(
     }
     auto job_id = response_json["job"].get<std::string>();
 
-    xacc::info("Honeywell job-id: " + job_id);
+    xacc::info("Quantinuum job-id: " + job_id);
 
     // Job has started, so watch for status == COMPLETED
     int dots = 1;
@@ -260,7 +260,7 @@ void HoneywellAccelerator::execute(
 
       if (get_job_status_json["status"].get<std::string>().find("failed") !=
           std::string::npos) {
-        xacc::error("Honeywell job failed: " + get_job_status_json.dump(4));
+        xacc::error("Quantinuum job failed: " + get_job_status_json.dump(4));
       }
       if (get_job_status_json["status"].get<std::string>() == "completed") {
         break;
@@ -270,7 +270,7 @@ void HoneywellAccelerator::execute(
         dots = 1;
       std::stringstream ss;
       ss << "\033[0;32m"
-         << "Honeywell Job "
+         << "Quantinuum Job "
          << "\033[0;36m" << job_id << "\033[0;32m"
          << " Status: " << get_job_status_json["status"].get<std::string>();
       for (int i = 0; i < dots; i++)
@@ -285,7 +285,7 @@ void HoneywellAccelerator::execute(
   std::cout << "\033[0m"
             << "\n";
 
-  xacc::info("\nHoneywell job result json:\n" + get_job_status);
+  xacc::info("\nQuantinuum job result json:\n" + get_job_status);
   auto results =
       get_job_status_json["results"].begin()->get<std::vector<std::string>>();
   for (auto &bitstring : results) {
@@ -295,7 +295,7 @@ void HoneywellAccelerator::execute(
   return;
 }
 
-void HoneywellAccelerator::execute(
+void QuantinuumAccelerator::execute(
     std::shared_ptr<AcceleratorBuffer> buffer,
     const std::vector<std::shared_ptr<CompositeInstruction>>
         compositeInstructions) {
@@ -307,19 +307,19 @@ void HoneywellAccelerator::execute(
   }
 }
 
-void HoneywellAccelerator::searchAPIKey(std::string &key) {
+void QuantinuumAccelerator::searchAPIKey(std::string &key) {
   //   // Search for the API Key in $HOME/.ibm_config,
   //   // $HW_CONFIG, or in the command line argument --ibm-api-key
-  std::string hwConfig(std::string(getenv("HOME")) + "/.honeywell_config");
+  std::string hwConfig(std::string(getenv("HOME")) + "/.quantinuum_config");
   if (xacc::fileExists(hwConfig)) {
     findApiKeyInFile(key, hwConfig);
   } else {
-    xacc::error("Cannot find Honeywell Config file with credentials "
-                "(~/.honeywell_config).");
+    xacc::error("Cannot find Quantinuum Config file with credentials "
+                "(~/.quantinuum_config).");
   }
 }
 
-void HoneywellAccelerator::findApiKeyInFile(std::string &apiKey,
+void QuantinuumAccelerator::findApiKeyInFile(std::string &apiKey,
                                             const std::string &path) {
   std::ifstream stream(path);
   std::string contents((std::istreambuf_iterator<char>(stream)),
@@ -414,7 +414,7 @@ RestClient::get(const std::string &remoteUrl, const std::string &path,
 }
 
 std::string
-HoneywellAccelerator::post(const std::string &_url, const std::string &path,
+QuantinuumAccelerator::post(const std::string &_url, const std::string &path,
                            const std::string &postStr,
                            std::map<std::string, std::string> headers) {
   std::string postResponse;
@@ -452,7 +452,7 @@ HoneywellAccelerator::post(const std::string &_url, const std::string &path,
 }
 
 std::string
-HoneywellAccelerator::get(const std::string &_url, const std::string &path,
+QuantinuumAccelerator::get(const std::string &_url, const std::string &path,
                           std::map<std::string, std::string> headers,
                           std::map<std::string, std::string> extraParams) {
   std::string getResponse;
@@ -494,7 +494,7 @@ HoneywellAccelerator::get(const std::string &_url, const std::string &path,
 }
 
 std::map<std::string, std::string>
-HoneywellAccelerator::generateRequestHeader() const {
+QuantinuumAccelerator::generateRequestHeader() const {
   std::map<std::string, std::string> headers{
       {"Authorization", api_key},
       {"Content-Type", "application/json"},
@@ -503,7 +503,7 @@ HoneywellAccelerator::generateRequestHeader() const {
   return headers;
 }
 
-std::string HoneywellAccelerator::getNativeCode(
+std::string QuantinuumAccelerator::getNativeCode(
     std::shared_ptr<CompositeInstruction> circuit,
     const HeterogeneousMap &config) {
   // Need to replace swaps with cnots
@@ -547,14 +547,14 @@ namespace {
 
 /**
  */
-class US_ABI_LOCAL HoneywellActivator : public BundleActivator {
+class US_ABI_LOCAL QuantinuumActivator : public BundleActivator {
 public:
-  HoneywellActivator() {}
+  QuantinuumActivator() {}
 
   /**
    */
   void Start(BundleContext context) {
-    auto xt = std::make_shared<xacc::quantum::HoneywellAccelerator>();
+    auto xt = std::make_shared<xacc::quantum::QuantinuumAccelerator>();
     context.RegisterService<xacc::Accelerator>(xt);
   }
 
@@ -565,4 +565,4 @@ public:
 
 } // namespace
 
-CPPMICROSERVICES_EXPORT_BUNDLE_ACTIVATOR(HoneywellActivator)
+CPPMICROSERVICES_EXPORT_BUNDLE_ACTIVATOR(QuantinuumActivator)

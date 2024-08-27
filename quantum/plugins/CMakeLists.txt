@@ -18,7 +18,7 @@ add_subdirectory(staq)
 
 if(XACC_REMOTE_ACCELERATORS)
     add_subdirectory(ionq)
-    add_subdirectory(honeywell)
+    add_subdirectory(quantinuum)
 endif()
 
 if(NOT QIREE_MINIMAL_BUILD)
