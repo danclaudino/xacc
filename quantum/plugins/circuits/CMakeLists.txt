@@ -85,5 +85,10 @@ endif()
 
 install(TARGETS ${LIBRARY_NAME} DESTINATION ${CMAKE_INSTALL_PREFIX}/plugins)
 
-add_subdirectory(py-qsearch)
-add_subdirectory(py-qfactor)
+if(XACC_BUILD_QSEARCH)
+  add_subdirectory(py-qsearch)
+endif()
+
+if(XACC_BUILD_QFACTOR)
+  add_subdirectory(py-qfactor)
+endif()
