@@ -10,8 +10,8 @@
  * Contributors:
  *   Alexander J. McCaskey - initial API and implementation
  *******************************************************************************/
-#ifndef XACC_HONEYWELL_ACCELERATOR_HPP_
-#define XACC_HONEYWELL_ACCELERATOR_HPP_
+#ifndef XACC_QUANTINUUM_ACCELERATOR_HPP_
+#define XACC_QUANTINUUM_ACCELERATOR_HPP_
 
 #include "InstructionIterator.hpp"
 #include "Accelerator.hpp"
@@ -56,7 +56,7 @@ std::string integral_to_binary_string(T byte, IS_INTEGRAL(T)) {
 
 std::string hex_string_to_binary_string(std::string hex);
 
-class HoneywellAccelerator : public Accelerator {
+class QuantinuumAccelerator : public Accelerator {
 public:
   void initialize(const HeterogeneousMap &params = {}) override;
   void updateConfiguration(const HeterogeneousMap &config) override {
@@ -76,10 +76,10 @@ public:
   }
 
   const std::string getSignature() override {
-    return "honeywell";
+    return "quantinuum";
   }
 
-   const std::string name() const override { return "honeywell"; }
+   const std::string name() const override { return "quantinuum"; }
   const std::string description() const override {
     return "";
   }
@@ -94,10 +94,10 @@ public:
                             const HeterogeneousMap &config = {}) override;
   bool isRemote() override { return true; }
 
-  HoneywellAccelerator()
+  QuantinuumAccelerator()
       : Accelerator(), restClient(std::make_shared<RestClient>()) {}
 
-  virtual ~HoneywellAccelerator() {}
+  virtual ~QuantinuumAccelerator() {}
 
 private:
   void refresh_tokens(bool force = false);
