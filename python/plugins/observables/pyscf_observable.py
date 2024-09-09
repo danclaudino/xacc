@@ -50,22 +50,45 @@ class PySCFObservable(xacc.Observable):
         sys.argv = ['']
         mol.atom = inputParams['geometry']
         mol.basis = inputParams['basis']
+
+        if 'charge' in inputParams:
+            mol.charge = inputParams['charge']
+
+        if 'spin' in inputParams:
+            mol.spin = inputParams['spin']
+
         if 'verbose' in inputParams and inputParams['verbose']:
             mol.build()
         else:
             mol.build(verbose=logger.QUIET)
-        if 'spin' in inputParams and inputParams['spin'] != 0:
-            mol.spin = inputParams['spin']
-            scf_wfn = scf.ROHF(mol)
+
+        is_restricted_ref = True
+        if 'reference' in inputParams:
+            if inputParams['reference'] == 'ROHF' or inputParams['reference'] == 'rohf':
+                scf_wfn = scf.ROHF(mol)
+            elif inputParams['reference'] == 'UHF' or inputParams['reference'] == 'uhf':
+                scf_wfn = scf.UHF(mol)
+                is_restricted_ref = False
+            elif inputParams['reference'] == 'RHF' or inputParams['reference'] == 'rhf':
+                if mol.spin != 0:
+                    xacc.error('Spin needs to be zero for RHF.')
+                scf_wfn = scf.RHF(mol)
         else:
-            scf_wfn = scf.RHF(mol)  # needs to be changed for open-shells
+            if mol.spin != 0:
+                xacc.error('Spin needs to be zero for RHF.')
+            scf_wfn = scf.RHF(mol)
+
         scf_wfn.conv_tol = 1e-8
-        scf_wfn.kernel()  # runs RHF calculations
+        scf_wfn.kernel()
         E_nucl = mol.energy_nuc()
 
         # Get orbital coefficients:
-        Ca = scf_wfn.mo_coeff
-        Cb = scf_wfn.mo_coeff
+        if is_restricted_ref:
+            Ca = scf_wfn.mo_coeff
+            Cb = scf_wfn.mo_coeff
+        else:
+            Ca = scf_wfn.mo_coeff[0, :, :]
+            Cb = scf_wfn.mo_coeff[1, :, :]
         C = np.block([
             [Ca, np.zeros_like(Cb)],
             [np.zeros_like(Ca), Cb]
@@ -157,7 +180,6 @@ class PySCFObservable(xacc.Observable):
 
         # --- 1-body frozen-core:
         Hamiltonian_fc_1body = np.zeros((n_active, n_active))
-        Hamiltonian_fc_1body_tmp = np.zeros((n_active, n_active))
         for p in range(n_active):
 
             ip = MSO_active_list[p]
@@ -166,12 +188,12 @@ class PySCFObservable(xacc.Observable):
 
                 iq = MSO_active_list[q]
                 Hamiltonian_fc_1body[p, q] = Hamiltonian_1body[ip, iq]
-                #Hamiltonian_fc_1body_tmp[p,q] =  Hamiltonian_1body[ip,iq]
 
                 for a in range(n_frozen):
 
                     ia = MSO_frozen_list[a]
                     Hamiltonian_fc_1body[p, q] += gmo[ia, ip, ia, iq]
+
                 if abs(Hamiltonian_fc_1body[p, q]) > 1e-12:
                     f_str += pos_or_neg(Hamiltonian_fc_1body[p, q]) + str(
                         abs(Hamiltonian_fc_1body[p, q])) + ' '
