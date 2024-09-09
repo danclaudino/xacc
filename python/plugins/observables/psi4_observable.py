@@ -53,8 +53,16 @@ class Psi4Observable(xacc.Observable):
                           'mp2_type':'conv',
                           'e_convergence': 1e-8,
                           'd_convergence': 1e-8}
-        if moleculeGeom.multiplicity() > 1:
-            options['reference'] = 'rohf'
+
+        if 'reference' in inputParams:
+            options['reference'] = inputParams['reference'].lower()
+
+        if options['reference'] == 'uhf':
+            is_restricted_ref = False
+
+        if moleculeGeom.multiplicity() > 1 and options['reference'] == 'rhf':
+            xacc.error('Spin multiplicity needs to be one for RHF.')
+
         psi4.set_options(options)
         scf_e, scf_wfn = psi4.energy('scf', return_wfn=True)
         E_nucl = moleculeGeom.nuclear_repulsion_energy()
