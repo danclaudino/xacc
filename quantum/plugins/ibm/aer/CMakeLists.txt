@@ -50,7 +50,7 @@ if(OpenMP_CXX_FOUND)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 endif()
 
-set(_bundle_name xacc_new_aer)
+set(_bundle_name xacc_aer)
 set_target_properties(${LIBRARY_NAME}
                       PROPERTIES COMPILE_DEFINITIONS
                                  US_BUNDLE_NAME=${_bundle_name}
