@@ -260,6 +260,7 @@ MEASURE 1 [1]
 }
 #endif
 
+
 TEST(AerAcceleratorTester, checkNoiseJson) {
   // Single-qubit noise model Json (IBMQ armonk)
   const std::string noiseModelJson =
@@ -679,6 +680,7 @@ TEST(AerAcceleratorTester, testDeuteronVqeH3DensityMatrix) {
   EXPECT_NEAR((*buffer)["opt-val"].as<double>(), -2.04482, 1e-4);
 }
 #endif
+
 TEST(AerAcceleratorTester, checkMatrixProductState) {
   auto xasmCompiler = xacc::getCompiler("xasm");
   auto ir = xasmCompiler->compile(R"(__qpu__ void test1(qbit q) {

@@ -20,6 +20,7 @@
 
 #include "controllers/aer_controller.hpp"
 #include "controllers/controller_execute.hpp"
+#include "framework/circuit.hpp"
 #include "noise/readout_error.hpp"
 
 #include "cppmicroservices/BundleActivator.h"
@@ -31,8 +32,8 @@
 
 #include <bitset>
 #include <optional>
-#include "QObjGenerator.hpp"
-#include "py-aer/aer_python_adapter.hpp"
+//#include "QObjGenerator.hpp"
+//#include "py-aer/aer_python_adapter.hpp"
 
 namespace xacc {
 namespace quantum {
@@ -193,6 +194,7 @@ void AerAccelerator::initialize(const HeterogeneousMap &params) {
   AER::Hacks::maybe_load_openmp("");
   initialized = true;
 }
+
 double AerAccelerator::calcExpectationValueZ(
     const std::vector<std::pair<double, double>> &in_stateVec,
     const std::vector<std::size_t> &in_bits) {
@@ -246,6 +248,7 @@ double AerAccelerator::calcExpectationValueZFromDensityMatrix(
 void AerAccelerator::execute(
     std::shared_ptr<AcceleratorBuffer> buffer,
     const std::shared_ptr<CompositeInstruction> program) {
+      
   if (m_simtype == "qasm") {
     auto qobj_str = xacc_to_qobj->translate(program);
 
@@ -303,8 +306,8 @@ void AerAccelerator::execute(
         op.qubits.emplace_back(q);
       }
       op.params = intial_state;
-      qobj.circuits[0].ops.insert(qobj.circuits[0].ops.begin(), op);
-      qobj.circuits[0].set_params(false);
+      qobj.circuits[0]->ops.insert(qobj.circuits[0]->ops.begin(), op);
+      qobj.circuits[0]->set_params(false);
     }
 
     // Run qobj circuits
@@ -332,7 +335,7 @@ void AerAccelerator::execute(
       }
       buffer->appendMeasurement(actual, nOccurrences);
     }
-  } else if (m_simtype == "pulse") {
+  } /*else if (m_simtype == "pulse") {
     // Get the correct QObject Generator
     auto qobjGen = xacc::getService<QObjGenerator>("pulse");
     auto chosenBackend = nlohmann::json::parse(physical_backend_properties.getString("config-json"));
@@ -403,7 +406,7 @@ void AerAccelerator::execute(
 
     auto state_vector = result_json["statevector"].get<std::vector<std::pair<double, double>>>();
     buffer->addExtraInfo("state", state_vector);
-  } else if (m_simtype == "density_matrix") {
+  }*/ else if (m_simtype == "density_matrix") {
     // remove all measures, don't need them
     auto tmp = xacc::ir::asComposite(program->clone());
     tmp->clear();
@@ -430,9 +433,10 @@ void AerAccelerator::execute(
     // std::cout << "QObj:\n" << qobj_str << "\n";
     assert(qobj.circuits.size() == 1);
     auto circ = qobj.circuits[0];
+    //std::shared_ptr<AER::Circuit> circ = std::make_shared<AER::Circuit>(qObjJson);
     // Output data container
     AER::ExperimentResult data;
-    densityMat.initialize_creg(circ.num_memory, circ.num_registers);
+    densityMat.initialize_creg(circ->num_memory, circ->num_registers);
     densityMat.initialize_qreg(buffer->size());
     if (m_options.keyExists<std::vector<std::complex<double>>>(
             "initial_state")) {
@@ -452,21 +456,22 @@ void AerAccelerator::execute(
       }
       densityMat.qreg().initialize_from_vector(intial_state);
     }
+
     // std::cout << "Num op: " << circ.ops.size() << "\n";
     if (!noise_model.empty()) {
       auto noise = qobj.noise_model;
       noise.enable_superop_method();
       auto opt_circ = noise.sample_noise(
-          circ, rng, AER::Noise::NoiseModel::Method::superop);
+          *circ, rng, AER::Noise::NoiseModel::Method::superop);
       densityMat.apply_ops(opt_circ.ops.begin(), opt_circ.ops.end(), data, rng);
     } else {
-      densityMat.apply_ops(circ.ops.begin(), circ.ops.end(), data, rng);
+      densityMat.apply_ops(circ->ops.begin(), circ->ops.end(), data, rng);
     }
     // std::cout << "Result: \n" << data.to_json().dump() << "\n";
     const double exp_val = densityMat.qreg().expval_pauli(
         measured_bits, std::string(measured_bits.size(), 'Z'));
 
-    auto dmData = densityMat.move_to_matrix(0);
+    auto dmData = densityMat.move_to_matrix();
     const auto length = dmData.size();
     assert(length == (1ULL << buffer->size()) * (1ULL << buffer->size()));
     std::complex<double> *dmPtr = dmData.move_to_buffer();
@@ -488,15 +493,18 @@ void AerAccelerator::execute(
         {ExecutionInfo::DmKey,
          std::make_shared<ExecutionInfo::DensityMatrixType>(std::move(dm))}};
     buffer->addExtraInfo("exp-val-z", exp_val);
-  }
-  else {
+
+  } else {
+
     assert(m_simtype == "statevector");
+
     // statevector
     // remove all measures, don't need them
     auto tmp = xacc::ir::asComposite(program->clone());
     tmp->clear();
     AER::reg_t measured_bits;
     InstructionIterator iter(program);
+
     while (iter.hasNext()) {
       auto next = iter.next();
       if (!next->isComposite() && next->name() != "Measure") {
@@ -505,6 +513,7 @@ void AerAccelerator::execute(
         measured_bits.push_back(next->bits()[0]);
       }
     }
+
     auto qobj_str = xacc_to_qobj->translate(tmp);
     nlohmann::json qObjJson = nlohmann::json::parse(qobj_str)["qObject"];
     qObjJson["config"]["method"] = "statevector";
@@ -512,12 +521,12 @@ void AerAccelerator::execute(
     AER::Statevector::State<AER::QV::QubitVector<double>> stateVec;
     AER::RngEngine rng;
     AER::Qobj qobj(qObjJson);
-    // std::cout << "QObj:\n" << qobj_str << "\n";
+
     assert(qobj.circuits.size() == 1);
     auto circ = qobj.circuits[0];
     // Output data container
     AER::ExperimentResult data;
-    stateVec.initialize_creg(circ.num_memory, circ.num_registers);
+    stateVec.initialize_creg(circ->num_memory, circ->num_registers);
     stateVec.initialize_qreg(buffer->size());
     if (m_options.keyExists<std::vector<std::complex<double>>>(
             "initial_state")) {
@@ -537,13 +546,12 @@ void AerAccelerator::execute(
       }
       stateVec.qreg().initialize_from_vector(intial_state);
     }
-    // std::cout << "Num op: " << circ.ops.size() << "\n";
-    stateVec.apply_ops(circ.ops.begin(), circ.ops.end(), data, rng);
-    // std::cout << "Result: \n" << data.to_json().dump() << "\n";
+
+    stateVec.apply_ops(circ->ops.begin(), circ->ops.end(), data, rng);
     const double exp_val = stateVec.qreg().expval_pauli(
         measured_bits, std::string(measured_bits.size(), 'Z'));
 
-    auto stateVecData = stateVec.move_to_vector(0);
+    auto stateVecData = stateVec.move_to_vector();
     const auto length = stateVecData.size();
     std::complex<double> *statePtr = stateVecData.move_to_buffer();
     ExecutionInfo::WaveFuncType wavefn(statePtr, statePtr + length);
@@ -572,17 +580,21 @@ void AerAccelerator::execute(
 
 void AerAccelerator::apply(std::shared_ptr<AcceleratorBuffer> buffer,
                            std::shared_ptr<Instruction> inst) {
+
   static AER::Statevector::State<AER::QV::QubitVector<double>> stateVec;
   static auto provider = xacc::getIRProvider("quantum");
   static AER::RngEngine rng;
   static std::set<AcceleratorBuffer*> knownBuffers;
+
   if (!xacc::container::contains(knownBuffers, buffer.get())) {
     stateVec.initialize_qreg(buffer->size());
     knownBuffers.emplace(buffer.get());
   }
+
   if (inst->isComposite() || inst->isAnalog()) {
     xacc::error("Only gates are allowed.");
   }
+
   xacc::info("Apply: " + inst->toString());
   if (inst->name() != "Measure") {
     auto tempComp = provider->createComposite("tmp");
@@ -591,22 +603,13 @@ void AerAccelerator::apply(std::shared_ptr<AcceleratorBuffer> buffer,
     auto qObjJson = nlohmann::json::parse(qobj_str)["qObject"];
     qObjJson["config"]["enable_truncation"] = false;
     AER::Qobj qobj(qObjJson);
-    // std::cout << "QObj:\n" << qobj_str << "\n";
     assert(qobj.circuits.size() == 1);
     auto circ = qobj.circuits[0];
     // Output data container
     AER::ExperimentResult data;
-    // std::cout << "Num op: " << circ.ops.size() << "\n";
-    stateVec.apply_ops(circ.ops.begin(), circ.ops.end(), data, rng);
-    // std::cout << "Result: \n" << data.to_json().dump() << "\n";
-    // auto wavefn = stateVec.copy_to_vector(0);
-    // std::cout << "HOWDY: " << wavefn.size() << "\n";
-    // for (int i = 0; i < wavefn.size(); ++i) {
-    //   std::cout << wavefn[i] << "\n";
-    // }
+    stateVec.apply_ops(circ->ops.begin(), circ->ops.end(), data, rng);
   }
-  //   stateVec.add_creg_to_data(data);
-  // If it was a Measure op:
+
   else {
     AER::reg_t measured_bits{inst->bits()[0]};
     const auto probs = stateVec.qreg().probabilities(measured_bits);
@@ -904,12 +907,14 @@ IbmqNoiseModel::getNoiseChannels(xacc::quantum::Gate &gate) const {
 std::string IbmqNoiseModel::toJson() const {
   // First, check if Qiskit is available,
   // try to use Qiskit util if possible.
+  /*
   const std::string noiseModelJson =
       xacc::aer::noiseModelFromBackendProperties(m_backendPropertiesJson);
   if (!noiseModelJson.empty()) {
     xacc::info("Qiskit generated noise model:\n" + noiseModelJson);
     return noiseModelJson;
   }
+  */
   
   // No Qiskit, create the noise model by ourselves from the backend properties.
   // Aer noise model Json

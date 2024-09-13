@@ -12,7 +12,7 @@
 # *******************************************************************************/
 
 add_subdirectory(aer)
-add_subdirectory(new_aer)
+#add_subdirectory(new_aer)
 
 set(LIBRARY_NAME xacc-ibm)
 
