@@ -59,7 +59,7 @@ OptResult NLOptimizer::optimize(OptFunction &function) {
 
   auto dim = function.dimensions();
   nlopt::algorithm algo = nlopt::algorithm::LN_COBYLA;
-  double tol = 1e-6;
+  double tol = 1e-6, absFTol = 1e-6, relFTol = 1e-6, absXTol = 1e-6, relXTol = 1e-6;
   int maxeval = 1000;
 
   bool maximize = false;
@@ -96,6 +96,34 @@ OptResult NLOptimizer::optimize(OptFunction &function) {
   if (options.keyExists<double>("nlopt-ftol")) {
     tol = options.get<double>("nlopt-ftol");
     xacc::info("[NLOpt] function tolerance set to " + std::to_string(tol));
+  }
+
+  if (options.keyExists<double>("absolute-ftol")) {
+    absFTol = options.get<double>("absolute-ftol");
+    xacc::info("[NLOpt] absolute function tolerance set to " + std::to_string(absFTol));
+  } else {
+    absFTol = tol;
+  }
+
+  if (options.keyExists<double>("relative-ftol")) {
+    relFTol = options.get<double>("relative-ftol");
+    xacc::info("[NLOpt] relative function tolerance set to " + std::to_string(relFTol));
+  } else {
+    relFTol = tol;
+  }
+
+  if (options.keyExists<double>("absolute-xtol")) {
+    absXTol = options.get<double>("absolute-xtol");
+    xacc::info("[NLOpt] absolute parameter tolerance set to " + std::to_string(absXTol));
+  } else {
+    absXTol = tol;
+  }
+
+  if (options.keyExists<double>("relative-xtol")) {
+    relXTol = options.get<double>("relative-xtol");
+    xacc::info("[NLOpt] relative parameter tolerance set to " + std::to_string(relXTol));
+  } else {
+    relXTol = tol;
   }
 
   if (options.keyExists<int>("maxeval")) {
@@ -154,7 +182,10 @@ OptResult NLOptimizer::optimize(OptFunction &function) {
   _opt.set_lower_bounds(lowerBounds);
   _opt.set_upper_bounds(upperBounds);
   _opt.set_maxeval(maxeval);
-  _opt.set_ftol_rel(tol);
+  _opt.set_ftol_rel(relFTol);
+  _opt.set_ftol_abs(absFTol);
+  _opt.set_xtol_rel(relXTol);
+  _opt.set_xtol_abs(absXTol);
 
   if (options.keyExists<double>("stopval")) {
     const double stopVal = options.get<double>("stopval");
