@@ -11,7 +11,6 @@
  *   Alexander J. McCaskey - initial API and implementation
  *******************************************************************************/
 #include "uccsd.hpp"
-#include "PauliOperatorParser.h"
 #include "xacc_service.hpp"
 #include "FermionOperator.hpp"
 #include "PauliOperator.hpp"

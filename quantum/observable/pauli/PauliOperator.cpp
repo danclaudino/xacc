@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2019 UT-Battelle, LLC.
+ * Copyright (c) 2024 UT-Battelle, LLC.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * and Eclipse Distribution License v1.0 which accompanies this
@@ -9,6 +9,7 @@
  *
  * Contributors:
  *   Alexander J. McCaskey - initial API and implementation
+ *   Daniel Claudino - measurement basis rotations, regex parser
  *******************************************************************************/
 #include "PauliOperator.hpp"
 #include "CompositeInstruction.hpp"
@@ -16,10 +17,12 @@
 #include "xacc.hpp"
 #include "xacc_service.hpp"
 #include <Eigen/Core>
-#include "PauliOperatorLexer.h"
-#include "PauliListenerImpl.hpp"
 #include <Eigen/Sparse>
+#include <complex>
 #include <unsupported/Eigen/KroneckerProduct>
+#include <regex>
+#include <iomanip>
+#include "PauliOperatorParser.hpp"
 
 namespace xacc {
 namespace quantum {
@@ -555,28 +558,108 @@ const std::string PauliOperator::toString() {
 }
 
 void PauliOperator::fromString(const std::string str) {
-  using namespace antlr4;
-  using namespace pauli;
 
-  ANTLRInputStream input(str);
-  PauliOperatorLexer lexer(&input);
-  lexer.removeErrorListeners();
-  lexer.addErrorListener(new PauliOperatorErrorListener());
+  std::smatch match;
+  std::string::const_iterator searchStart(str.cbegin());
+  std::complex<double> coefficient;
+  bool minus = 0;
 
-  CommonTokenStream tokens(&lexer);
-  PauliOperatorParser parser(&tokens);
-  parser.removeErrorListeners();
-  parser.addErrorListener(new PauliOperatorErrorListener());
+  PauliOperatorParser parser;
+  while (std::regex_search(searchStart, str.cend(), match, parser.matchPattern)) {
 
-  // Walk the Abstract Syntax Tree
-  tree::ParseTree *tree = parser.pauliSrc();
+    std::string pauliString;
+    std::map<int, std::string> pauliMap;
 
-  PauliListenerImpl listener;
-  tree::ParseTreeWalker::DEFAULT.walk(&listener, tree);
+    PauliOperatorParser::MatchType type = parser.getMatchType(match);
+    switch (type) {
+      case PauliOperatorParser::MatchType::SIGN: {
+        std::string sign(match[1].str());
+        PauliOperatorParser::removeWhiteSpaces(sign);
+        minus = (sign == "-");
+        searchStart = match.suffix().first;
+        continue;
+      }
 
-  clear();
+      case PauliOperatorParser::MatchType::COMPLEX_AND_P:
+        coefficient = std::complex<double>{std::stod(match[2].str()), std::stod(match[3].str())};
+        if (minus) coefficient *= -1.0;
+        pauliString = match[4].str();
+        PauliOperatorParser::removeWhiteSpaces(pauliString);
+        parser.parsePauliString(pauliString, pauliMap);
+        break;
 
-  operator+=(listener.getOperator());
+      case PauliOperatorParser::MatchType::REAL_AND_P:
+        coefficient = std::stod(match[5].str());
+        if (minus) coefficient *= -1.0;
+        pauliString = match[6].str();
+        PauliOperatorParser::removeWhiteSpaces(pauliString);
+        parser.parsePauliString(pauliString, pauliMap);
+        break;
+
+      case PauliOperatorParser::MatchType::P_ONLY:
+        coefficient = minus ? -1.0 : 1.0;
+        pauliString = match[7].str();
+        PauliOperatorParser::removeWhiteSpaces(pauliString);
+        parser.parsePauliString(pauliString, pauliMap);
+        break;
+
+      case PauliOperatorParser::MatchType::IDENTITY_ONLY:
+        coefficient = minus ? -1.0 : 1.0;
+        break;
+
+      case PauliOperatorParser::MatchType::REAL_AND_I:
+        coefficient = std::stod(match[9].str());
+        if (minus) coefficient *= -1.0;
+        break;
+
+      case PauliOperatorParser::MatchType::COMPLEX_AND_I:
+        coefficient = std::complex<double>{std::stod(match[11].str()), std::stod(match[12].str())};
+        if (minus) coefficient *= -1.0;
+        break;
+
+      case PauliOperatorParser::MatchType::REAL_ONLY:
+        coefficient = std::stod(match[14].str());
+        if (minus) coefficient *= -1.0;
+        break;
+
+      case PauliOperatorParser::MatchType::COMPLEX_ONLY:
+        coefficient = std::complex<double>{std::stod(match[15].str()), std::stod(match[16].str())};
+        if (minus) coefficient *= -1.0;
+        break;
+
+      case PauliOperatorParser::MatchType::UNKNOWN:
+        default:
+          xacc::error("String contains unknown patterns.");
+          break;
+    }
+
+    if (std::abs(coefficient) < 1.0e-12) {
+      searchStart = match.suffix().first;
+      continue;
+    }
+
+    if (pauliString.empty()) {
+
+      if (!terms.insert({"I", coefficient}).second) {
+        terms.at("I").coeff() += coefficient;
+      }
+      if (std::abs(terms.at("I").coeff()) < 1e-12) {
+        terms.erase("I");
+      }
+
+    } else {
+
+      if (!terms.insert({pauliString, Term(coefficient, pauliMap)}).second) {
+        terms.at(pauliString).coeff() += coefficient;
+      }
+      if (std::abs(terms.at(pauliString).coeff()) < 1e-12) {
+        terms.erase(pauliString);
+      }
+
+    }
+
+    searchStart = match.suffix().first;
+  }
 }
 
 bool PauliOperator::contains(PauliOperator &op) {
