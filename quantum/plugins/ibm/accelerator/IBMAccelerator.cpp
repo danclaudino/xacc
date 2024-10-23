@@ -13,11 +13,14 @@
 #include "IBMAccelerator.hpp"
 #include <cctype>
 #include <fstream>
+#include <iostream>
+#include <string>
 
 #include "Properties.hpp"
 #include "QObjectExperimentVisitor.hpp"
 #include "OpenPulseVisitor.hpp"
 #include "CountGatesOfTypeVisitor.hpp"
+#include "cpr/response.h"
 
 #ifndef REMOTE_DISABLED
 #include <cpr/cpr.h>
@@ -40,7 +43,11 @@ namespace quantum {
 const std::string IBMAccelerator::IBM_AUTH_URL =
     "https://auth.quantum-computing.ibm.com";
 const std::string IBMAccelerator::IBM_API_URL =
-    "https://api-qcon.quantum-computing.ibm.com";
+"https://api.quantum-computing.ibm.com";
+
+const std::string IBMAccelerator::IBM_TRANSPILER_URL = "https://cloud-transpiler.quantum.ibm.com";
+
+    //"https://api-qcon.quantum-computing.ibm.com";
 const std::string IBMAccelerator::DEFAULT_IBM_BACKEND = "ibmq_qasm_simulator";
 const std::string IBMAccelerator::IBM_LOGIN_PATH = "/api/users/loginWithToken";
 
@@ -204,7 +211,7 @@ bool IBMAccelerator::verifyJobsLimit(std::string& curr_backend) {
 }
 
 void IBMAccelerator::processBackendCandidate(nlohmann::json& backend_json) {
-  // First of all filter by count fo qubits
+  // First of all filter by count of qubits
   if (requested_n_qubits > 0) {
     if( backend_json.count("n_qubits") ) {
       int nqubits = backend_json["n_qubits"].get<int>();
@@ -245,24 +252,30 @@ void IBMAccelerator::selectBackend(std::vector<std::string>& all_available_backe
     lowest_queue_backend = true;
   }
 
-  for (auto &b : backends_root["backends"]) {
-    if (!b.count("backend_name")) {
-      continue;
-    }
+  for (auto &b : backends_root["devices"]) {
+    std::cout << b << "\n";
+    
     // Simple case: select by backend_name
     if (!lowest_queue_backend) {
-      if (b["backend_name"].get<std::string>() == backend) {
-        availableBackends.insert(std::make_pair(backend, b));
+      if (b == backend) {
+        const std::string path("/runtime/backends/" + backend + "/configuration");
+        auto backend_json = json::parse(get(IBM_API_URL, path, headers, {{"name", b}})); 
+        availableBackends.insert(std::make_pair(backend, backend_json));
       }
     } else {
       // Select backend by job queue size and by parameters (optional)
-      processBackendCandidate(b);
+      const std::string path("/runtime/backends/{name}/configuration");
+      auto backend_json = json::parse(get(IBM_API_URL, path, headers, {{"name", b}})); 
+      processBackendCandidate(backend_json);
     }
-    all_available_backends.push_back(b["backend_name"].get<std::string>());
+    //all_available_backends.push_back(b["backend_name"].get<std::string>());
+    all_available_backends.push_back(b);
+    
   }
   if (lowest_queue_backend) {
     xacc::info("Backend with lowest queue count: " + backend);
   }
+
 }
 
 
@@ -277,6 +290,7 @@ void IBMAccelerator::initialize(const HeterogeneousMap &params) {
     // and get the apikey, hub, group, and project
     updateConfiguration(params);
     searchAPIKey(apiKey, hub, group, project);
+    currentApiToken = apiKey;
 
     // We should have backend set by now
 
@@ -287,37 +301,25 @@ void IBMAccelerator::initialize(const HeterogeneousMap &params) {
       project = "main";
     }
 
-    IBM_CREDENTIALS_PATH =
-        "/api/Network/" + hub + "/Groups/" + group + "/Projects/" + project;
-    getBackendPath = IBM_CREDENTIALS_PATH + "/devices?access_token=";
-
-    // Post apiKey to get temp api key
-    tokenParam += apiKey + "\"}";
-    std::map<std::string, std::string> headers{
+    headers = {
+        {"Accept", "application/json"},
         {"Content-Type", "application/json"},
-        {"Connection", "keep-alive"},
-        {"Content-Length", std::to_string(tokenParam.length())}};
-    auto response = post(IBM_AUTH_URL, IBM_LOGIN_PATH, tokenParam, headers);
-    auto response_json = json::parse(response);
+        {"Authorization", "Bearer " + apiKey}
+        };
 
-    // set the temp API token
-    currentApiToken = response_json["id"].get<std::string>();
+    auto getUser = get(IBM_API_URL, "/runtime/users/me", headers);
+    auto provider = json::parse(getUser)["instances"][0]["name"].get<std::string>();
 
-    // Get all backend information
-    response = get(IBM_API_URL, getBackendPath + currentApiToken);
-    backends_root = json::parse("{\"backends\":" + response + "}");
-    getBackendPropsResponse = "{\"backends\":" + response + "}";
-
+    backends_root = json::parse(get(IBM_API_URL, "/runtime/backends", headers, {{"provider", provider}}));
+    
     std::vector<std::string> your_available_backends;
     selectBackend(your_available_backends);
-    getBackendPropertiesPath = "/api/Network/" + hub + "/Groups/" + group +
-                               "/Projects/" + project + "/devices/" + backend +
-                               "/properties";
+
+    getBackendPropertiesPath = "/runtime/backends/" + backend + "/properties";
     // Get current backend properties
     auto backend_props_response =
-        get(IBM_API_URL, getBackendPropertiesPath, {},
-            {std::make_pair("version", "1"),
-             std::make_pair("access_token", currentApiToken)});
+        get(IBM_API_URL, getBackendPropertiesPath, headers, {{"name", backend}});
+
     xacc::info("Backend property:\n" + backend_props_response);
     auto props = json::parse(backend_props_response);
     backendProperties.insert({backend, props});
@@ -337,19 +339,28 @@ void IBMAccelerator::initialize(const HeterogeneousMap &params) {
       }
       xacc::error(error_ss.str());
     }
-
     chosenBackend = availableBackends[backend];
     xacc::info("Backend config:\n" + chosenBackend.dump());
+
     multi_meas_enabled = chosenBackend.value("multi_meas_enabled", false);
-    defaults_response =
-        get(IBM_API_URL,
-            IBM_CREDENTIALS_PATH + "/devices/" + backend + "/defaults", {},
-            {std::make_pair("version", "1"),
-             std::make_pair("access_token", currentApiToken)});
+
+    auto defaultsPath = "/runtime/backends/" + backend + "/defaults";
+    defaults_response = get(IBM_API_URL, defaultsPath, headers);
     xacc::info("Backend default:\n" + defaults_response);
+
+    // check if cloud transpiler is working in case it will be used
+    if (useCloudTranspiler) {
+      auto checkTranspilerHealth = get(IBM_TRANSPILER_URL, "/health", headers);
+      auto transpilerHealth = json::parse(checkTranspilerHealth)["message"].get<std::string>();
+      if (transpilerHealth != "Health OK") {
+        xacc::warning("IBM cloud transpiler is not working. Unless your program is already transpiled, it will not run.");
+      }
+    }
 
     initialized = true;
   }
+
+  std::cout << "Done with initialize()\n";
 }
 
 void IBMAccelerator::execute(
@@ -365,6 +376,7 @@ std::string QasmQObjGenerator::getQObjJsonStr(
     std::vector<std::pair<int, int>> &connectivity,
     const nlohmann::json &backendDefaults) {
 
+    std::cout << "QasmQObjGenerato\n";
   // Create a QObj
   xacc::ibm::QObject qobj;
   qobj.set_qobj_id("xacc-qobj-id");
@@ -374,8 +386,10 @@ std::string QasmQObjGenerator::getQObjJsonStr(
 
   const auto basis_gates =
       backend["basis_gates"].get<std::vector<std::string>>();
+
+      std::cout << basis_gates << "\n";
   // If the gate set has "u3" -> old gateset.
-  const auto gateSet = (xacc::container::contains(basis_gates, "u3"))
+  const auto gateSet = (xacc::container::contains(basis_gates, "cz"))
                            ? QObjectExperimentVisitor::GateSet::U_CX
                            : QObjectExperimentVisitor::GateSet::RZ_SX_CX;
   // Create the Experiments
@@ -408,12 +422,15 @@ std::string QasmQObjGenerator::getQObjJsonStr(
     // any IRTransformations have been run.
     for (auto &inst : experiment.get_instructions()) {
       if (inst.get_name() == "cx") {
-        std::pair<int, int> connection{inst.get_qubits()[0],
-                                       inst.get_qubits()[1]};
+
+        std::set<int> connection;
+        connection.insert(inst.get_qubits()[0]);
+        connection.insert(inst.get_qubits()[1]);
+
         auto it =
             std::find_if(connectivity.begin(), connectivity.end(),
                          [&connection](const std::pair<int, int> &element) {
-                           return element == connection;
+                           return std::set<int>{element.first, element.second} == connection;
                          });
         if (it == std::end(connectivity)) {
           std::stringstream ss;
@@ -460,6 +477,9 @@ std::string PulseQObjGenerator::getQObjJsonStr(
     const std::string getBackendPropsResponse,
     std::vector<std::pair<int, int>> &connectivity,
     const nlohmann::json &backendDefaults) {
+
+
+      std::cout << "PUILSE\n" << "\n";
   xacc::info("Backend Info: \n" + backend.dump());
   xacc::ibm_pulse::PulseQObject root;
   xacc::ibm_pulse::QObject qobj;
@@ -568,9 +588,6 @@ void IBMAccelerator::execute(
     std::shared_ptr<AcceleratorBuffer> buffer,
     const std::vector<std::shared_ptr<CompositeInstruction>> circuits) {
 
-  // Local Declarations
-  std::string backendName = backend;
-  chosenBackend = availableBackends[backend];
   auto connectivity = getConnectivity();
 
   // Figure out if these circuits are pulse-level
@@ -606,14 +623,109 @@ void IBMAccelerator::execute(
   auto qobjGen = xacc::getService<QObjGenerator>(qobj_type);
 
   // Generate the QObject JSON
+  std::cout << "Get qobj\n";
   auto jsonStr = qobjGen->getQObjJsonStr(circuits, shots, chosenBackend,
                                          getBackendPropsResponse, connectivity,
                                          json::parse(defaults_response));
 
   xacc::info("qobj: " + jsonStr);
 
-  // Now we have JSON QObj, lets start the object upload
-  // First reserve the Job on IBM's end
+    auto compiler = xacc::getCompiler("staq");
+    auto qasm_circuit = compiler->translate(circuits[0]);
+
+
+    headers.emplace("backend", backend);
+ nlohmann::json json_body = {
+        {"qasm_circuits", qasm_circuit }
+    };
+
+    cpr::Parameters query_params{};
+        query_params.Add({"backend", backend});
+
+
+  auto response = cpr::Post(
+          cpr::Url{IBM_TRANSPILER_URL + "/transpile"},  // Change to your URL
+          query_params,  // Query parameters
+          cpr::Header{{"Authorization", "Bearer " + currentApiToken},
+                      {"Content-Type", "application/json"},
+                      {"Accept", "application/json"}},
+          cpr::Body{json_body.dump()}  // JSON body as string
+      );
+
+auto task_id = json::parse(response.text)["task_id"].get<std::string>();
+
+  int dots = 1;
+  std::string state;
+  while (true) {
+    
+    auto get_job_status = get(IBM_TRANSPILER_URL, "/transpile/" + task_id, headers);
+    json get_job_status_json;
+    //std::cout << get_job_status << "\n";
+    try {
+      get_job_status_json = json::parse(get_job_status);
+    } catch (json::exception const &) {
+      std::cout << "Failed to parse response '" << get_job_status
+                << "' from job status " << task_id << std::endl;
+      throw;
+    }
+    state = get_job_status_json["state"].get<std::string>();
+    //std::cout << state << "\n";
+    if (state.find("SUCCESS") == std::string::npos && state.find("PENDING") == std::string::npos) {
+      xacc::error("Transpiler failed: " + get_job_status_json.dump(4));
+    }
+
+    if (state == "SUCCESS") {
+      break;
+    }
+
+    if (dots > 4)
+      dots = 1;
+    std::stringstream ss;
+    ss << "\033[0;32m"
+        << "IBM Transpiler Job "
+        << "\033[0;36m" << task_id << "\033[0;32m"
+        << " Status: " << state;
+    for (int i = 0; i < dots; i++)
+      ss << '.';
+    dots++;
+    std::cout << '\r' << ss.str() << std::setw(20) << std::setfill(' ')
+              << std::flush;
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+
+auto transpiled = json::parse(get(IBM_TRANSPILER_URL, "/transpile/" + task_id, headers));
+
+std::vector<std::string> transpiledCircuits;
+for (auto& c : transpiled["result"]) {
+  transpiledCircuits.push_back(c["qasm"]);
+}
+
+
+    nlohmann::json body = {
+        {"program_id", "sampler"},
+        {"hub", hub},
+        {"group", group},
+        {"project", project},
+        {"backend", backend},
+        {"params", {
+            {"pubs", json::array()},
+            {"support_qiskit", false},
+            {"version", 2}
+        }}
+    };
+
+  for (const auto & c : transpiledCircuits) {
+    body["params"]["pubs"].push_back(
+      {c, json::array(), 128}
+    );
+  }
+
+
+    auto reserve_response = post(IBM_API_URL, "/runtime/jobs", body.dump(), headers);
+
+ exit(0); 
+
+/*
   auto reserve_job =
       std::string("{\"backend\": {\"name\": \"" + backend +
                   "\"}, \"shots\": 1, \"allowObjectStorage\": true}");
@@ -625,12 +737,15 @@ void IBMAccelerator::execute(
       post(IBM_API_URL,
            IBM_CREDENTIALS_PATH + "/Jobs?access_token=" + currentApiToken,
            reserve_job, headers);
+  */
   auto reserve_response_json = json::parse(reserve_response);
 
   // Job reserved, get the Job ID
   auto job_id = reserve_response_json["id"].get<std::string>();
   currentJobId = job_id;
 
+  std::cout << currentJobId << "\n";
+  exit(0);
   buffer->addExtraInfo("ibm-job-id", job_id);
 
   // Now we ask IBM for an upload URL for the QObj
@@ -662,7 +777,7 @@ void IBMAccelerator::execute(
   jobIsRunning = true;
 
   // Job has started, so watch for status == COMPLETED
-  int dots = 1;
+  //int dots = 1;
   while (true) {
     get_job_status = get(IBM_API_URL, IBM_CREDENTIALS_PATH + "/Jobs/" + job_id +
                                           "?access_token=" + currentApiToken);
@@ -1084,7 +1199,8 @@ void IBMAccelerator::contributeInstructions(
 const std::string RestClient::post(const std::string &remoteUrl,
                                    const std::string &path,
                                    const std::string &postStr,
-                                   std::map<std::string, std::string> headers) {
+                                   std::map<std::string, std::string> headers,
+                                   const std::string &queryParams) {
 #ifndef REMOTE_DISABLED
   if (headers.empty()) {
     headers.insert(std::make_pair("Content-type", "application/json"));
@@ -1100,8 +1216,23 @@ const std::string RestClient::post(const std::string &remoteUrl,
   if (verbose)
     xacc::info("Posting to " + remoteUrl + path + ", with data " + postStr);
 
-  auto r = cpr::Post(cpr::Url{remoteUrl + path}, cpr::Body(postStr), cprHeaders,
+  cpr::Response r;
+  if (queryParams.empty()) {
+    r = cpr::Post(cpr::Url{remoteUrl + path}, cpr::Body(postStr), cprHeaders,
                      cpr::VerifySsl(false));
+  } else {
+    json jsonQueryParams = json::parse(queryParams);
+    cpr::Parameters cprQueryParams{};
+    for (const auto& [key, value] : jsonQueryParams.items()) {
+        cprQueryParams.Add({key, value});
+    }
+        r = cpr::Post(cpr::Url{remoteUrl + path}, cpr::Body(postStr), cprHeaders,
+                     cpr::VerifySsl(false), cprQueryParams);
+
+  }
+
+  //auto r = cpr::Post(cpr::Url{remoteUrl + path}, cpr::Body(postStr), cprHeaders,
+  //                   cpr::VerifySsl(false));
 
   if (r.status_code != 200)
     throw std::runtime_error("HTTP POST Error - status code " +
@@ -1254,6 +1385,8 @@ std::string
 IBMAccelerator::getNativeCode(std::shared_ptr<CompositeInstruction> program,
                               const HeterogeneousMap &config) {
   std::string format = "QObj"; // QObj/QASM
+  std::cout << "native\n\n";
+  exit(0);
   if (config.stringExists("format")) {
     format = config.getString("format");
   }

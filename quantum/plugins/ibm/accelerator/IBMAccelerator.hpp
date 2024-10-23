@@ -63,10 +63,13 @@ public:
                                  const std::string &path,
                                  const std::string &postStr,
                                  std::map<std::string, std::string> headers =
-                                     std::map<std::string, std::string>{});
+                                     std::map<std::string, std::string>{},
+                                     const std::string& queryParams = "");
+
   virtual void put(const std::string &remoteUrl, const std::string &putStr,
                    std::map<std::string, std::string> headers =
-                       std::map<std::string, std::string>{});
+                       std::map<std::string, std::string>{});\
+
   virtual const std::string
   get(const std::string &remoteUrl, const std::string &path,
       std::map<std::string, std::string> headers =
@@ -113,6 +116,10 @@ public:
     // Specify a mode: "qasm" or "pulse"
     if (config.stringExists("mode")) {
       mode = config.getString("mode");
+    }
+
+    if (config.keyExists<bool>("cloud-transpiler")) {
+      useCloudTranspiler = config.get<bool>("cloud-transpiler");
     }
   }
 
@@ -174,6 +181,9 @@ private:
   static const std::string IBM_API_URL;
   static const std::string DEFAULT_IBM_BACKEND;
   static const std::string IBM_LOGIN_PATH;
+  static const std::string IBM_TRANSPILER_URL;
+  bool useCloudTranspiler = true;
+
   std::string IBM_CREDENTIALS_PATH = "";
 
   std::string currentApiToken;
@@ -210,6 +220,9 @@ private:
                   std::map<std::string, std::string> headers =
                       std::map<std::string, std::string>{},
                   std::map<std::string, std::string> extraParams = {});
+
+  std::map<std::string, std::string> headers;
+
 };
 
 // IBM Pulse Transformation (gate-pulse lowering)
