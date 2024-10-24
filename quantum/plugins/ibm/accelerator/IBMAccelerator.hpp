@@ -9,6 +9,7 @@
  *
  * Contributors:
  *   Alexander J. McCaskey - initial API and implementation
+  *   Daniel Claudino - Update to Qiskit Runtime (Qiskit 1.x)
  *******************************************************************************/
 #ifndef QUANTUM_GATE_ACCELERATORS_IBMACCELERATOR_HPP_
 #define QUANTUM_GATE_ACCELERATORS_IBMACCELERATOR_HPP_
@@ -36,18 +37,6 @@ public:
                  std::vector<std::pair<int, int>> &connectivity,
                  const nlohmann::json &backendDefaults) override;
   const std::string name() const override { return "qasm"; }
-  const std::string description() const override { return ""; }
-};
-
-class PulseQObjGenerator : public QObjGenerator {
-public:
-  std::string
-  getQObjJsonStr(std::vector<std::shared_ptr<CompositeInstruction>> composites,
-                 const int &shots, const nlohmann::json &backend,
-                 const std::string getBackendPropsResponse,
-                 std::vector<std::pair<int, int>> &connectivity,
-                 const nlohmann::json &backendDefaults) override;
-  const std::string name() const override { return "pulse"; }
   const std::string description() const override { return ""; }
 };
 
@@ -129,9 +118,6 @@ public:
 
   HeterogeneousMap getProperties() override;
 
-  void
-  contributeInstructions(const std::string &custom_json_config = "") override;
-
   const std::string getSignature() override {
     return "ibm:" + chosenBackend["backend_name"].get<std::string>();
   }
@@ -172,7 +158,7 @@ private:
   void findApiKeyInFile(std::string &key, std::string &hub, std::string &group,
                         std::string &project, const std::string &p);
   void selectBackend(std::vector<std::string>& all_available_backends);
-  void processBackendCandidate(nlohmann::json& b);
+  void processBackendCandidate(const nlohmann::json& b);
   bool verifyJobsLimit(std::string& curr_backend);
 
   std::shared_ptr<RestClient> restClient;
@@ -199,7 +185,7 @@ private:
   bool jobIsRunning = false;
   std::string currentJobId = "";
 
-  std::map<std::string, nlohmann::json> availableBackends;
+  std::vector<std::string> availableBackends;
   nlohmann::json chosenBackend;
   bool multi_meas_enabled = false;
   bool initialized = false;
@@ -212,7 +198,10 @@ private:
   bool filterByJobsLimit = false;
   std::string post(const std::string &_url, const std::string &path,
                    const std::string &postStr,
-                   std::map<std::string, std::string> headers = {});
+                   std::map<std::string, std::string> headers = {},
+                   const std::string& queryParams = "");
+
+
   void put(const std::string &_url, const std::string &postStr,
            std::map<std::string, std::string> headers = {});
 
@@ -225,21 +214,6 @@ private:
 
 };
 
-// IBM Pulse Transformation (gate-pulse lowering)
-class IBMPulseTransform : public IRTransformation {
-public:
-  IBMPulseTransform() {}
-  void apply(std::shared_ptr<CompositeInstruction> program,
-             const std::shared_ptr<Accelerator> accelerator,
-             const HeterogeneousMap &options = {}) override;
-
-  const IRTransformationType type() const override {
-    return IRTransformationType::Optimization;
-  }
-
-  const std::string name() const override { return "ibm-pulse"; }
-  const std::string description() const override { return ""; }
-};
 } // namespace quantum
 } // namespace xacc
 
