@@ -15,30 +15,21 @@
 #define QUANTUM_GATE_ACCELERATORS_IBMACCELERATOR_HPP_
 
 #include "InstructionIterator.hpp"
-#include "Properties.hpp"
+//#include "Properties.hpp"
 #include "Accelerator.hpp"
 #include <bitset>
 #include <type_traits>
-#include "Backends.hpp"
-#include "Properties.hpp"
+//#include "Backends.hpp"
+//#include "Properties.hpp"
 #include "IRTransformation.hpp"
-#include "QObjGenerator.hpp"
+#include "Json.hpp"
+//#include "QObjGenerator.hpp"
 
 using namespace xacc;
+using json = nlohmann::json;
 
 namespace xacc {
 namespace quantum {
-class QasmQObjGenerator : public QObjGenerator {
-public:
-  std::string
-  getQObjJsonStr(std::vector<std::shared_ptr<CompositeInstruction>> composites,
-                 const int &shots, const nlohmann::json &backend,
-                 const std::string getBackendPropsResponse,
-                 std::vector<std::pair<int, int>> &connectivity,
-                 const nlohmann::json &backendDefaults) override;
-  const std::string name() const override { return "qasm"; }
-  const std::string description() const override { return ""; }
-};
 
 class RestClient {
 
@@ -86,7 +77,9 @@ public:
   std::map<std::string, std::map<int, int>> name2QubitMap;
 
   void initialize(const HeterogeneousMap &params = {}) override;
+
   void updateConfiguration(const HeterogeneousMap &config) override {
+
     if (config.keyExists<int>("shots")) {
       shots = config.get<int>("shots");
     }
@@ -153,33 +146,47 @@ public:
   virtual ~IBMAccelerator() {}
 
 private:
+
   void searchAPIKey(std::string &key, std::string &hub, std::string &group,
                     std::string &project);
+
   void findApiKeyInFile(std::string &key, std::string &hub, std::string &group,
                         std::string &project, const std::string &p);
+
   void selectBackend(std::vector<std::string>& all_available_backends);
+
   void processBackendCandidate(const nlohmann::json& b);
+
   bool verifyJobsLimit(std::string& curr_backend);
+
+  std::string post(const std::string &_url, const std::string &path,
+                   const std::string &postStr,
+                   std::map<std::string, std::string> headers = {},
+                   const std::string& queryParams = "");
+
+  void put(const std::string &_url, const std::string &postStr,
+           std::map<std::string, std::string> headers = {});
+
+  std::string get(const std::string &_url, const std::string &path,
+                  std::map<std::string, std::string> headers =
+                      std::map<std::string, std::string>{},
+                  std::map<std::string, std::string> extraParams = {});
 
   std::shared_ptr<RestClient> restClient;
 
-  static const std::string IBM_AUTH_URL;
   static const std::string IBM_API_URL;
-  static const std::string DEFAULT_IBM_BACKEND;
-  static const std::string IBM_LOGIN_PATH;
   static const std::string IBM_TRANSPILER_URL;
   bool useCloudTranspiler = true;
 
   std::string IBM_CREDENTIALS_PATH = "";
 
   std::string currentApiToken;
-
   std::string hub;
   std::string group;
   std::string project;
+  std::string backend;
 
   int shots = 1024;
-  std::string backend = DEFAULT_IBM_BACKEND;
   int backendQueueLength = -1; 
 
   bool jobIsRunning = false;
@@ -196,19 +203,6 @@ private:
   std::string mode = "qasm";
   int requested_n_qubits = 0;
   bool filterByJobsLimit = false;
-  std::string post(const std::string &_url, const std::string &path,
-                   const std::string &postStr,
-                   std::map<std::string, std::string> headers = {},
-                   const std::string& queryParams = "");
-
-
-  void put(const std::string &_url, const std::string &postStr,
-           std::map<std::string, std::string> headers = {});
-
-  std::string get(const std::string &_url, const std::string &path,
-                  std::map<std::string, std::string> headers =
-                      std::map<std::string, std::string>{},
-                  std::map<std::string, std::string> extraParams = {});
 
   std::map<std::string, std::string> headers;
 

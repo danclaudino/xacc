@@ -58,10 +58,6 @@ public:
     auto c2 = std::make_shared<xacc::quantum::QObjectCompiler>();
     context.RegisterService<xacc::Compiler>(c2);
 
-    auto qasm_qobj_gen = std::make_shared<xacc::quantum::QasmQObjGenerator>();
-
-    context.RegisterService<quantum::QObjGenerator>(qasm_qobj_gen);
-
   }
 
   /**
